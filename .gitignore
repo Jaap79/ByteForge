@@ -1,0 +1,15 @@
+# FASM temporary/backups
+*.bak
+*.tmp
+*.lst
+
+# Local editor/system files
+.vs/
+.vscode/
+Thumbs.db
+desktop.ini
+
+# Keep the current private beta binary, ignore ad-hoc local binaries.
+*.exe
+!dist/ByteForge_beta7.exe
+
