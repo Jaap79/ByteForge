@@ -1,4 +1,4 @@
-; ByteForge 1.0 RC2 beta 1 - pure FASM / Win32 Unicode
+; ByteForge 1.0 RC2 beta 2 - pure FASM / Win32 Unicode
 ; Build: fasm src\ByteForge.asm dist\Byteforge.exe
 ;
 ; Goals:
@@ -13,9 +13,9 @@
 ;   ByteForge's OpenFileDocument implementation
 ; - Selectable checksum window with optional expected MD5/SHA-256
 ;   verification, one-shot "no more matches" notice, and editor Ctrl+/- zoom.
-; - RC2 beta 1: View->Markdown Preview (Ctrl+M) uses a compact, built-in
+; - RC2 beta 2: View->Markdown Preview (Ctrl+M) uses a compact, built-in
 ;   RichEdit preview layer; source text remains untouched for editing/saving.
-; - RC2 beta 1: closing, New, Open and Drag & Drop prompt to save unsaved
+; - RC2 beta 2: closing, New, Open and Drag & Drop prompt to save unsaved
 ;   changes; new documents use Save As, existing documents save in place.
 ; - Security issues and bugs can be reported to jaapengel79@proton.me.
 ; - Window title contains full path + '*' when modified
@@ -153,16 +153,16 @@ FONT_CONSOLAS       = 3
 LOCAL_VER_MAJOR     = 1
 LOCAL_VER_MINOR     = 0
 LOCAL_VER_PATCH     = 0
-LOCAL_VER_BUILD     = 2
+LOCAL_VER_BUILD     = 3
 
 section '.data' data readable writeable
 
-VERSION_W           du 'ByteForge 1.0 RC2 beta 1',0
-APP_CLASS           du 'ByteForge10RC2B1Class',0
-APP_TITLE           du 'ByteForge 1.0 RC2 beta 1',0
-CHECKSUM_CLASS      du 'ByteForge10RC2B1ChecksumClass',0
-JUMP_CLASS          du 'ByteForge10RC2B1JumpClass',0
-FILEINFO_CLASS      du 'ByteForge10RC2B1FileInfoClass',0
+VERSION_W           du 'ByteForge 1.0 RC2 beta 2',0
+APP_CLASS           du 'ByteForge10RC2B2Class',0
+APP_TITLE           du 'ByteForge 1.0 RC2 beta 2',0
+CHECKSUM_CLASS      du 'ByteForge10RC2B2ChecksumClass',0
+JUMP_CLASS          du 'ByteForge10RC2B2JumpClass',0
+FILEINFO_CLASS      du 'ByteForge10RC2B2FileInfoClass',0
 EDIT_CLASS          du 'RICHEDIT50W',0
 WINEDIT_CLASS       du 'EDIT',0
 BUTTON_CLASS        du 'BUTTON',0
@@ -398,7 +398,7 @@ menuHexRightTxt du 'Hex view &right',0
 menuHexBelowTxt du 'Hex view &below',0
 menuHexCloseTxt du '&Close hex view',0
 menuChecksumTxt du '&Checksum of File',0
-aboutTxt du 'ByteForge 1.0 RC2 beta 1',13,10,'Small and fast text editor without fluff.',13,10,'Single EXE, no CRT, standard Windows DLLs only.',13,10,13,10,'Security issues and bugs: jaapengel79@proton.me',0
+aboutTxt du 'ByteForge 1.0 RC2 beta 2',13,10,'Small and fast text editor without fluff.',13,10,'Single EXE, no CRT, standard Windows DLLs only.',13,10,13,10,'Security issues and bugs: jaapengel79@proton.me',0
 savePromptTxt du 'Save changes before continuing?',0
 findNotFoundTxt du 'No more matches found.',0
 SAVE_FAIL_PREFIX du 'Save failed. GetLastError = ',0
@@ -429,7 +429,7 @@ checksumShaSkippedTxt du 'SHA-256: not checked',13,10,0
 updateTitleTxt du 'Check for Updates',0
 updateAgentTxt du 'ByteForge update check',0
 updateUrlTxt du 'https://raw.githubusercontent.com/Jaap79/ByteForge/main/version.json',0
-updateCurrentTxt du 'ByteForge 1.0 RC2 beta 1 (1.0.0.2)',0
+updateCurrentTxt du 'ByteForge 1.0 RC2 beta 2 (1.0.0.3)',0
 updateAvailableTxt du 'A newer ByteForge version is available.',13,10,13,10,'Current: ',0
 updateCurrentLatestTxt du 'ByteForge is up to date.',13,10,13,10,'Current: ',0
 updateLatestTxt du 13,10,'Latest: ',0
@@ -1488,7 +1488,7 @@ CreateEditorControl:
     ret
 
 CreateMarkdownPreviewControl:
-    ; RC2 beta 1: Markdown Preview is a separate read-only RichEdit layer.
+    ; RC2 beta 2: Markdown Preview is a separate read-only RichEdit layer.
     ; The real editor buffer is never replaced, so Save/Save As always writes
     ; the original Markdown source text.
     invoke CreateWindowEx,WS_EX_CLIENTEDGE,EDIT_CLASS,0,WS_CHILD or WS_VSCROLL or ES_MULTILINE or ES_AUTOVSCROLL or ES_NOHIDESEL or ES_READONLY,0,0,0,0,[parentHwnd],0,[hInst],0
@@ -1526,14 +1526,16 @@ UpdateMarkdownPreviewIfVisible:
     ret
 
 RenderMarkdownPreview:
-    ; Compact Markdown Preview: copy source text to the preview RichEdit and
-    ; apply line-based formatting. This keeps the editor buffer pristine.
+    ; Compact Markdown Preview: render source Markdown into a cleaner preview
+    ; buffer first, then apply line-based RichEdit formatting. This keeps the
+    ; editor buffer pristine while avoiding visible "#", "```" and list markers.
     cmp [hwndMdPreview],0
     je .ret
     invoke SendMessage,[hwndEdit],WM_GETTEXTLENGTH,0,0
     mov [tmpLen],eax
     inc eax
     shl eax,1
+    mov [tmpSize],eax
     invoke GlobalAlloc,GMEM_FIXED or GMEM_ZEROINIT,eax
     test eax,eax
     jz .ret
@@ -1541,16 +1543,179 @@ RenderMarkdownPreview:
     mov eax,[tmpLen]
     inc eax
     invoke SendMessage,[hwndEdit],WM_GETTEXT,eax,[tmpPtr]
+    invoke GlobalAlloc,GMEM_FIXED or GMEM_ZEROINIT,[tmpSize]
+    test eax,eax
+    jz .free_source
+    mov [convPtr],eax
+    call BuildMarkdownPreviewText
     invoke SendMessage,[hwndMdPreview],WM_SETREDRAW,FALSE,0
-    invoke SetWindowText,[hwndMdPreview],[tmpPtr]
+    invoke SetWindowText,[hwndMdPreview],[convPtr]
     invoke SendMessage,[hwndMdPreview],WM_SETFONT,[hEditorFont],TRUE
     call ApplyRichEditTextColor
     call ApplyMarkdownPreviewFormatting
     invoke SendMessage,[hwndMdPreview],EM_SETSEL,0,0
     invoke SendMessage,[hwndMdPreview],WM_SETREDRAW,TRUE,0
     invoke InvalidateRect,[hwndMdPreview],0,TRUE
+    invoke GlobalFree,[convPtr]
+    mov [convPtr],0
+.free_source:
     invoke GlobalFree,[tmpPtr]
     mov [tmpPtr],0
+.ret:
+    ret
+
+BuildMarkdownPreviewText:
+    mov [mdCodeBlock],0
+    mov esi,[tmpPtr]
+    mov edi,[convPtr]
+.line_loop:
+    mov ax,[esi]
+    test ax,ax
+    jz .done
+    cmp ax,'`'
+    jne .not_fence
+    cmp word [esi+2],'`'
+    jne .not_fence
+    cmp word [esi+4],'`'
+    jne .not_fence
+    xor [mdCodeBlock],1
+    call SkipMarkdownSourceLine
+    jmp .line_loop
+.not_fence:
+    mov [mdLineStyle],0
+    mov ebx,esi
+    cmp [mdCodeBlock],0
+    je .normal_line
+    mov [mdLineStyle],4
+    jmp .copy_line
+.normal_line:
+    cmp ax,'#'
+    jne .not_heading
+    mov [mdLineStyle],1
+.skip_hashes:
+    cmp word [ebx],'#'
+    jne .skip_heading_spaces
+    add ebx,2
+    jmp .skip_hashes
+.skip_heading_spaces:
+    cmp word [ebx],' '
+    jne .copy_line
+    add ebx,2
+    jmp .skip_heading_spaces
+.not_heading:
+    cmp ax,'>'
+    jne .not_quote
+    mov [mdLineStyle],2
+    add ebx,2
+    cmp word [ebx],' '
+    jne .copy_line
+    add ebx,2
+    jmp .copy_line
+.not_quote:
+    cmp ax,'-'
+    je .maybe_bullet
+    cmp ax,'*'
+    je .maybe_bullet
+    cmp ax,'0'
+    jb .copy_line
+    cmp ax,'9'
+    ja .copy_line
+    call TryMarkdownNumberedList
+    test eax,eax
+    jz .copy_line
+    jmp .emit_bullet
+.maybe_bullet:
+    cmp word [esi+2],' '
+    jne .copy_line
+    mov [mdLineStyle],3
+    add ebx,4
+.emit_bullet:
+    mov ax,2022h
+    stosw
+    mov ax,' '
+    stosw
+.copy_line:
+    mov ax,[ebx]
+    test ax,ax
+    jz .done
+    cmp ax,13
+    je .copy_cr
+    cmp ax,10
+    je .copy_lf
+    cmp [mdLineStyle],4
+    je .copy_char
+    cmp ax,'*'
+    je .skip_inline_marker
+    cmp ax,'`'
+    je .skip_inline_marker
+.copy_char:
+    stosw
+.skip_inline_marker:
+    add ebx,2
+    jmp .copy_line
+.copy_cr:
+    stosw
+    add ebx,2
+    cmp word [ebx],10
+    jne .next_line
+    mov ax,10
+    stosw
+    add ebx,2
+    jmp .next_line
+.copy_lf:
+    stosw
+    add ebx,2
+.next_line:
+    mov esi,ebx
+    jmp .line_loop
+.done:
+    mov word [edi],0
+    ret
+
+TryMarkdownNumberedList:
+    ; ESI = original line, EBX receives first content char when matched.
+    mov ebx,esi
+.digit_loop:
+    mov ax,[ebx]
+    cmp ax,'0'
+    jb .no
+    cmp ax,'9'
+    ja .no
+    add ebx,2
+    jmp .digit_loop
+.no_more_digits:
+    ; unused label kept for readability
+.no:
+    cmp word [ebx],'.'
+    jne .fail
+    cmp word [ebx+2],' '
+    jne .fail
+    add ebx,4
+    mov [mdLineStyle],3
+    mov eax,1
+    ret
+.fail:
+    xor eax,eax
+    ret
+
+SkipMarkdownSourceLine:
+    mov ax,[esi]
+    test ax,ax
+    jz .ret
+    cmp ax,13
+    je .cr
+    cmp ax,10
+    je .lf
+    add esi,2
+    jmp SkipMarkdownSourceLine
+.cr:
+    add esi,2
+    cmp word [esi],10
+    jne .ret
+    add esi,2
+    ret
+.lf:
+    add esi,2
 .ret:
     ret
 
@@ -1563,92 +1728,122 @@ ApplyMarkdownPreviewFormatting:
     test ax,ax
     jz .done
     mov [mdLineStart],ecx
-    mov edi,esi
-    mov edx,ecx
-.find_line_end:
-    mov ax,[edi]
-    test ax,ax
-    jz .line_ready
-    cmp ax,13
-    je .line_ready
-    cmp ax,10
-    je .line_ready
-    add edi,2
-    inc edx
-    jmp .find_line_end
-.line_ready:
-    mov [mdLineEnd],edx
     mov [mdLineStyle],0
-
-    mov ax,[esi]
     cmp ax,'`'
     jne .not_fence
     cmp word [esi+2],'`'
     jne .not_fence
     cmp word [esi+4],'`'
     jne .not_fence
-    mov [mdLineStyle],4
     xor [mdCodeBlock],1
-    jmp .apply_style
+    call SkipMarkdownSourceLine
+    jmp .line_loop
 .not_fence:
+    mov ebx,esi
     cmp [mdCodeBlock],0
     je .normal_line
     mov [mdLineStyle],4
-    jmp .apply_style
+    jmp .count_line
 .normal_line:
     cmp ax,'#'
     jne .not_heading
     mov [mdLineStyle],1
-    jmp .apply_style
+    call CountMarkdownHashes
+    jmp .count_line
 .not_heading:
     cmp ax,'>'
     jne .not_quote
     mov [mdLineStyle],2
-    jmp .apply_style
+    add ebx,2
+    cmp word [ebx],' '
+    jne .count_line
+    add ebx,2
+    jmp .count_line
 .not_quote:
     cmp ax,'-'
     je .maybe_list
     cmp ax,'*'
-    jne .apply_style
+    je .maybe_list
+    cmp ax,'0'
+    jb .count_line
+    cmp ax,'9'
+    ja .count_line
+    call TryMarkdownNumberedList
+    test eax,eax
+    jz .count_line
+    add ecx,2
+    jmp .count_line
 .maybe_list:
     cmp word [esi+2],' '
-    jne .apply_style
+    jne .count_line
     mov [mdLineStyle],3
-.apply_style:
+    add ebx,4
+    add ecx,2
+.count_line:
+    mov ax,[ebx]
+    test ax,ax
+    jz .line_ready
+    cmp ax,13
+    je .line_ready
+    cmp ax,10
+    je .line_ready
+    cmp [mdLineStyle],4
+    je .count_char
+    cmp ax,'*'
+    je .skip_count_marker
+    cmp ax,'`'
+    je .skip_count_marker
+.count_char:
+    inc ecx
+.skip_count_marker:
+    add ebx,2
+    jmp .count_line
+.line_ready:
+    mov [mdLineEnd],ecx
     cmp [mdLineStyle],0
     je .skip_newline
     push esi
-    push edi
     push ecx
-    push edx
+    push ebx
     call ApplyMarkdownLineStyle
-    pop edx
+    pop ebx
     pop ecx
-    pop edi
     pop esi
 .skip_newline:
-    mov ax,[edi]
+    mov ax,[ebx]
     test ax,ax
     jz .done
     cmp ax,13
     jne .skip_lf
-    add edi,2
-    inc edx
-    cmp word [edi],10
+    add ebx,2
+    inc ecx
+    cmp word [ebx],10
     jne .next_line
-    add edi,2
-    inc edx
+    add ebx,2
+    inc ecx
     jmp .next_line
 .skip_lf:
     cmp ax,10
     jne .next_line
-    add edi,2
-    inc edx
+    add ebx,2
+    inc ecx
 .next_line:
-    mov esi,edi
-    mov ecx,edx
+    mov esi,ebx
     jmp .line_loop
 .done:
+    ret
+
+CountMarkdownHashes:
+    cmp word [ebx],'#'
+    jne .spaces
+    add ebx,2
+    jmp CountMarkdownHashes
+.spaces:
+    cmp word [ebx],' '
+    jne .ret
+    add ebx,2
+    jmp .spaces
+.ret:
     ret
 
 ApplyMarkdownLineStyle:
@@ -1884,7 +2079,7 @@ DoSaveAsDialog:
     ret
 
 PromptSaveIfModified:
-    ; RC2 beta 1: central guard for destructive document changes.
+    ; RC2 beta 2: central guard for destructive document changes.
     ; Returns EAX=1 to continue, EAX=0 to cancel the caller's action.
     cmp [modified],0
     jne .ask
@@ -4630,11 +4825,11 @@ section '.rsrc' resource data readable
 
   versioninfo version,4,1,0,0409h,04E4h,\
               'FileDescription','Small and fast text editor without fluff',\
-              'FileVersion','1.0.0.2',\
+              'FileVersion','1.0.0.3',\
               'InternalName','ByteForge',\
               'OriginalFilename','Byteforge.exe',\
               'ProductName','ByteForge',\
-              'ProductVersion','1.0.0.2'
+              'ProductVersion','1.0.0.3'
 
 section '.idata' import data readable writeable
 

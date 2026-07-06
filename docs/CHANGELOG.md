@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0 RC2 beta 2
+
+- Improved Markdown Preview rendering so common Markdown markers are stripped from preview text.
+- Hidden fenced-code delimiters while keeping code contents in monospace preview formatting.
+- Rendered unordered and numbered lists with cleaner bullet output.
+
 ## 1.0 RC2 beta 1
 
 - Added View -> Markdown Preview with Ctrl+M.
