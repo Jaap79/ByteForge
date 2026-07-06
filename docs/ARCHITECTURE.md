@@ -7,7 +7,7 @@ ByteForge is intentionally small and direct.
 - Native Win32 GUI application.
 - Pure FASM source.
 - No CRT.
-- Uses standard Windows DLLs only.
+- Uses standard Windows DLLs only, including WinINet for the manual update check.
 - Main editor and hex viewer are RichEdit-based controls.
 
 ## Reporting
@@ -38,3 +38,9 @@ Line endings are detected as CRLF, LF, CR or unknown.
 ## Hex Viewer
 
 The hex viewer renders the current file bytes when the document is unmodified, and the current editor buffer when the document is new or modified. Search and jump synchronization prefer byte-offset based selection in the rendered hex dump.
+
+## Update Check
+
+Help -> Check for Updates performs a manual network request to the public `version.json` file in this repository. It compares the remote numeric version to the local build and shows a message with the GitHub Releases link when a newer version exists.
+
+ByteForge does not check automatically on startup and does not send telemetry or a unique identifier.

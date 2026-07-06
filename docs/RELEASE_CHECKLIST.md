@@ -24,6 +24,7 @@
 - [ ] Verify executable VersionInfo in Explorer.
 - [ ] Verify About dialog shows `ByteForge 1.0 RC1`.
 - [ ] Verify About dialog shows `jaapengel79@proton.me`.
+- [ ] Verify Help -> Check for Updates reports the current release correctly.
 
 ## Build Command
 

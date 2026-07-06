@@ -19,7 +19,8 @@
 ; - Stable dark-gray mode for editor + status bar
 ;
 ; Notes:
-; - Uses standard Windows DLLs only: kernel32, user32, comdlg32, shell32, gdi32.
+; - Uses standard Windows DLLs only: kernel32, user32, comdlg32, shell32,
+;   gdi32, advapi32 and wininet.
 ; - Classic menu bar remains system-drawn for compactness/stability.
 ; - RC1 polish: executable version resource identifies ByteForge.
 
@@ -71,6 +72,7 @@ IDM_ZOOM_OUT        = 234
 IDM_ZOOM_RESET      = 235
 IDM_JUMP_LINECHAR   = 236
 IDM_FILE_INFO       = 237
+IDM_CHECK_UPDATES   = 238
 ID_BTN_CHECKSUM_COMPARE = 301
 ID_BTN_CHECKSUM_CLOSE   = 302
 ID_ED_MD5_ACTUAL        = 303
@@ -132,10 +134,18 @@ CALG_MD5            = 00008003h
 CALG_SHA_256        = 0000800Ch
 HP_HASHVAL          = 2
 HASH_CHUNK          = 32768
+UPDATE_BUF_SIZE     = 4096
+INTERNET_OPEN_TYPE_PRECONFIG = 0
+INTERNET_FLAG_RELOAD = 80000000h
+INTERNET_FLAG_NO_CACHE_WRITE = 04000000h
 FONT_DEFAULT        = 0
 FONT_SEGOE          = 1
 FONT_GEORGIA        = 2
 FONT_CONSOLAS       = 3
+LOCAL_VER_MAJOR     = 1
+LOCAL_VER_MINOR     = 0
+LOCAL_VER_PATCH     = 0
+LOCAL_VER_BUILD     = 1
 
 section '.data' data readable writeable
 
@@ -306,14 +316,24 @@ hHashSha    dd 0
 hHashFile   dd 0
 hashRead    dd 0
 hashLen     dd 0
+hInternet   dd 0
+hUpdateUrl  dd 0
+updateRead  dd 0
+remoteVerMajor dd 0
+remoteVerMinor dd 0
+remoteVerPatch dd 0
+remoteVerBuild dd 0
 hashBuf     rb HASH_CHUNK
+updateBuf   rb UPDATE_BUF_SIZE
 md5Bin      rb 16
 shaBin      rb 32
 md5Hex      rw 33
 shaHex      rw 65
+remoteVersionText rw 32
 expectedMd5 rw 80
 expectedSha rw 96
 checksumResultBuf rw 384
+updateMsgBuf rw 1024
 fileInfoBuf rw 4096
 fileInfoAttr rb 36
 localFileTime rb 8
@@ -352,6 +372,7 @@ menuFontGeorgiaTxt du '&Georgia',0
 menuFontConsolasTxt du '&Consolas',0
 menuExitTxt du 'E&xit',0
 menuAboutTxt du '&About ByteForge',0
+menuCheckUpdatesTxt du '&Check for Updates...',0
 menuHexTxt du '&Hex Viewer',0
 menuHexLeftTxt du 'Hex view &left',0
 menuHexRightTxt du 'Hex view &right',0
@@ -385,6 +406,16 @@ checksumMd5SkippedTxt du 'MD5: not checked',13,10,0
 checksumShaMatchTxt du 'SHA-256: MATCH',13,10,0
 checksumShaMismatchTxt du 'SHA-256: MISMATCH',13,10,0
 checksumShaSkippedTxt du 'SHA-256: not checked',13,10,0
+updateTitleTxt du 'Check for Updates',0
+updateAgentTxt du 'ByteForge update check',0
+updateUrlTxt du 'https://raw.githubusercontent.com/Jaap79/ByteForge/main/version.json',0
+updateCurrentTxt du 'ByteForge 1.0 RC1 (1.0.0.1)',0
+updateAvailableTxt du 'A newer ByteForge version is available.',13,10,13,10,'Current: ',0
+updateCurrentLatestTxt du 'ByteForge is up to date.',13,10,13,10,'Current: ',0
+updateLatestTxt du 13,10,'Latest: ',0
+updateDownloadTxt du 13,10,13,10,'Download: https://github.com/Jaap79/ByteForge/releases/latest',0
+updateFailTxt du 'Could not check for updates.',13,10,13,10,'Please check:',13,10,'https://github.com/Jaap79/ByteForge/releases/latest',0
+updateVersionKey db '"version"',0
 jumpTitleTxt du 'Jump to line/char',0
 jumpLineTxt du 'Line',0
 jumpCharTxt du 'Character (optional)',0
@@ -784,6 +815,8 @@ proc WndProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
     je .do_hex_close
     cmp eax,IDM_SHA256
     je .do_checksum
+    cmp eax,IDM_CHECK_UPDATES
+    je .do_check_updates
     xor eax,eax
     ret
 .do_new:
@@ -900,6 +933,10 @@ proc WndProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
     ret
 .do_checksum:
     call ShowFileChecksums
+    xor eax,eax
+    ret
+.do_check_updates:
+    call CheckForUpdates
     xor eax,eax
     ret
 .do_about:
@@ -1216,6 +1253,8 @@ MakeMenu:
     invoke AppendMenu,[hMenuTools],MF_POPUP,[hMenuHex],menuHexTxt
     invoke AppendMenu,[hMenuTools],MF_STRING,IDM_SHA256,menuChecksumTxt
 
+    invoke AppendMenu,[hMenuHelp],MF_STRING,IDM_CHECK_UPDATES,menuCheckUpdatesTxt
+    invoke AppendMenu,[hMenuHelp],MF_SEPARATOR,0,0
     invoke AppendMenu,[hMenuHelp],MF_STRING,IDM_ABOUT,menuAboutTxt
 
     invoke AppendMenu,[hMenuMain],MF_POPUP,[hMenuFile],menuFileTxt
@@ -3527,6 +3566,235 @@ FormatInfoLine:
     call StrCatW
     ret
 
+CheckForUpdates:
+    ; Manual, privacy-friendly update check. No startup ping, no telemetry:
+    ; this only downloads the public version.json when the user asks.
+    call ClearUpdateState
+    invoke InternetOpen,updateAgentTxt,INTERNET_OPEN_TYPE_PRECONFIG,0,0,0
+    test eax,eax
+    jz .fail
+    mov [hInternet],eax
+    invoke InternetOpenUrl,[hInternet],updateUrlTxt,0,0,INTERNET_FLAG_RELOAD or INTERNET_FLAG_NO_CACHE_WRITE,0
+    test eax,eax
+    jz .close_inet_fail
+    mov [hUpdateUrl],eax
+    invoke InternetReadFile,[hUpdateUrl],updateBuf,UPDATE_BUF_SIZE-1,updateRead
+    test eax,eax
+    jz .close_all_fail
+    mov eax,[updateRead]
+    cmp eax,UPDATE_BUF_SIZE-1
+    jbe .term_ready
+    mov eax,UPDATE_BUF_SIZE-1
+.term_ready:
+    mov byte [updateBuf+eax],0
+    invoke InternetCloseHandle,[hUpdateUrl]
+    mov [hUpdateUrl],0
+    invoke InternetCloseHandle,[hInternet]
+    mov [hInternet],0
+    call ParseUpdateVersion
+    test eax,eax
+    jz .fail
+    call CompareRemoteVersion
+    test eax,eax
+    jnz .available
+    mov edi,updateMsgBuf
+    mov esi,updateCurrentLatestTxt
+    call StrCopyW
+    mov esi,updateCurrentTxt
+    call StrCatW
+    mov esi,updateLatestTxt
+    call StrCatW
+    mov esi,remoteVersionText
+    call StrCatW
+    invoke MessageBox,[hwndMain],updateMsgBuf,updateTitleTxt,MB_OK or MB_ICONINFORMATION
+    ret
+.available:
+    mov edi,updateMsgBuf
+    mov esi,updateAvailableTxt
+    call StrCopyW
+    mov esi,updateCurrentTxt
+    call StrCatW
+    mov esi,updateLatestTxt
+    call StrCatW
+    mov esi,remoteVersionText
+    call StrCatW
+    mov esi,updateDownloadTxt
+    call StrCatW
+    invoke MessageBox,[hwndMain],updateMsgBuf,updateTitleTxt,MB_OK or MB_ICONINFORMATION
+    ret
+.close_all_fail:
+    cmp [hUpdateUrl],0
+    je .close_inet_fail
+    invoke InternetCloseHandle,[hUpdateUrl]
+    mov [hUpdateUrl],0
+.close_inet_fail:
+    cmp [hInternet],0
+    je .fail
+    invoke InternetCloseHandle,[hInternet]
+    mov [hInternet],0
+.fail:
+    invoke MessageBox,[hwndMain],updateFailTxt,updateTitleTxt,MB_OK or MB_ICONWARNING
+    ret
+
+ClearUpdateState:
+    mov [hInternet],0
+    mov [hUpdateUrl],0
+    mov [updateRead],0
+    mov [remoteVerMajor],0
+    mov [remoteVerMinor],0
+    mov [remoteVerPatch],0
+    mov [remoteVerBuild],0
+    mov word [remoteVersionText],0
+    mov byte [updateBuf],0
+    ret
+
+ParseUpdateVersion:
+    mov esi,updateBuf
+.search:
+    mov al,[esi]
+    test al,al
+    jz .fail
+    cmp al,'"'
+    jne .next
+    cmp byte [esi+1],'v'
+    jne .next
+    cmp byte [esi+2],'e'
+    jne .next
+    cmp byte [esi+3],'r'
+    jne .next
+    cmp byte [esi+4],'s'
+    jne .next
+    cmp byte [esi+5],'i'
+    jne .next
+    cmp byte [esi+6],'o'
+    jne .next
+    cmp byte [esi+7],'n'
+    jne .next
+    cmp byte [esi+8],'"'
+    jne .next
+    add esi,9
+    jmp .find_colon
+.next:
+    inc esi
+    jmp .search
+.find_colon:
+    mov al,[esi]
+    test al,al
+    jz .fail
+    cmp al,':'
+    je .find_quote
+    inc esi
+    jmp .find_colon
+.find_quote:
+    inc esi
+    mov al,[esi]
+    test al,al
+    jz .fail
+    cmp al,'"'
+    jne .find_quote
+    inc esi
+    mov edi,remoteVersionText
+    mov [tmpOutLen],0
+    mov [tmpLen],0
+    mov [tmpSize],0
+.version_loop:
+    mov al,[esi]
+    test al,al
+    jz .fail
+    cmp al,'"'
+    je .done_value
+    cmp [tmpSize],31
+    jae .skip_copy
+    xor ah,ah
+    stosw
+    inc [tmpSize]
+.skip_copy:
+    cmp al,'.'
+    je .dot
+    cmp al,'0'
+    jb .fail
+    cmp al,'9'
+    ja .fail
+    mov eax,[tmpLen]
+    imul eax,10
+    movzx ebx,byte [esi]
+    sub ebx,'0'
+    add eax,ebx
+    mov [tmpLen],eax
+    inc esi
+    jmp .version_loop
+.dot:
+    call StoreRemoteVersionComponent
+    mov [tmpLen],0
+    inc esi
+    jmp .version_loop
+.done_value:
+    call StoreRemoteVersionComponent
+    mov word [edi],0
+    cmp [tmpSize],0
+    je .fail
+    mov eax,1
+    ret
+.fail:
+    xor eax,eax
+    ret
+
+StoreRemoteVersionComponent:
+    mov eax,[tmpOutLen]
+    cmp eax,0
+    je .major
+    cmp eax,1
+    je .minor
+    cmp eax,2
+    je .patch
+    cmp eax,3
+    je .build
+    ret
+.major:
+    mov eax,[tmpLen]
+    mov [remoteVerMajor],eax
+    inc [tmpOutLen]
+    ret
+.minor:
+    mov eax,[tmpLen]
+    mov [remoteVerMinor],eax
+    inc [tmpOutLen]
+    ret
+.patch:
+    mov eax,[tmpLen]
+    mov [remoteVerPatch],eax
+    inc [tmpOutLen]
+    ret
+.build:
+    mov eax,[tmpLen]
+    mov [remoteVerBuild],eax
+    inc [tmpOutLen]
+    ret
+
+CompareRemoteVersion:
+    ; EAX = 1 when remote version is newer than local, otherwise 0.
+    mov eax,[remoteVerMajor]
+    cmp eax,LOCAL_VER_MAJOR
+    ja .newer
+    jb .not_newer
+    mov eax,[remoteVerMinor]
+    cmp eax,LOCAL_VER_MINOR
+    ja .newer
+    jb .not_newer
+    mov eax,[remoteVerPatch]
+    cmp eax,LOCAL_VER_PATCH
+    ja .newer
+    jb .not_newer
+    mov eax,[remoteVerBuild]
+    cmp eax,LOCAL_VER_BUILD
+    ja .newer
+.not_newer:
+    xor eax,eax
+    ret
+.newer:
+    mov eax,1
+    ret
+
 ShowFileInfo:
     call BuildFileInfoText
     cmp [hwndFileInfo],0
@@ -3969,7 +4237,8 @@ library kernel32,'KERNEL32.DLL',\
         gdi32,'GDI32.DLL',\
         comdlg32,'COMDLG32.DLL',\
         shell32,'SHELL32.DLL',\
-        advapi32,'ADVAPI32.DLL'
+        advapi32,'ADVAPI32.DLL',\
+        wininet,'WININET.DLL'
 
 include 'api\kernel32.inc'
 include 'api\user32.inc'
@@ -3987,3 +4256,8 @@ import advapi32,\
        CryptGetHashParam,'CryptGetHashParam',\
        CryptDestroyHash,'CryptDestroyHash',\
        CryptReleaseContext,'CryptReleaseContext'
+import wininet,\
+       InternetOpen,'InternetOpenW',\
+       InternetOpenUrl,'InternetOpenUrlW',\
+       InternetReadFile,'InternetReadFile',\
+       InternetCloseHandle,'InternetCloseHandle'

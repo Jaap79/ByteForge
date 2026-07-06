@@ -23,6 +23,7 @@ ByteForge is a compact Win32 Unicode text editor written in pure FASM. It is bui
 - Hex viewer with synchronized search and jump behavior.
 - MD5 and SHA-256 checksum dialog with optional expected-hash comparison.
 - File Info dialog with path, format, line/character counts, modified state and checksums.
+- Manual Help -> Check for Updates via the public `version.json` in this repository.
 - Text zoom via Ctrl+Plus, Ctrl+Minus and Reset Zoom.
 - Jump to line/character.
 

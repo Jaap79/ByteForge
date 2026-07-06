@@ -2,6 +2,7 @@
 
 ## 1.0 RC1
 
+- Added manual Help -> Check for Updates using the public repository `version.json`.
 - Promoted ByteForge to 1.0 RC1.
 - Standardized release executable name to `Byteforge.exe`.
 - Added public bug/security reporting contact: `jaapengel79@proton.me`.
