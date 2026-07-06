@@ -1,5 +1,5 @@
-; ByteForge 1.0 beta 7 - pure FASM / Win32 Unicode
-; Build: fasm TinyEdit_10_beta7.asm ByteForge_beta7.exe
+; ByteForge 1.0 RC1 - pure FASM / Win32 Unicode
+; Build: fasm src\ByteForge.asm dist\Byteforge.exe
 ;
 ; Goals:
 ; - small single EXE, no CRT, no external bundled DLLs
@@ -11,8 +11,9 @@
 ; - Explorer/Open With startup file association support via GetCommandLineW
 ;   and CommandLineToArgvW; startup, drag/drop and File->Open all share
 ;   ByteForge's OpenFileDocument implementation
-; - beta 7: selectable checksum window with optional expected MD5/SHA-256
+; - RC1: selectable checksum window with optional expected MD5/SHA-256
 ;   verification, one-shot "no more matches" notice, and editor Ctrl+/- zoom.
+; - Security issues and bugs can be reported to jaapengel79@proton.me.
 ; - Window title contains full path + '*' when modified
 ; - Status bar shows line/column left, version right
 ; - Stable dark-gray mode for editor + status bar
@@ -20,7 +21,7 @@
 ; Notes:
 ; - Uses standard Windows DLLs only: kernel32, user32, comdlg32, shell32, gdi32.
 ; - Classic menu bar remains system-drawn for compactness/stability.
-; - beta 7 polish: executable version resource now identifies ByteForge.
+; - RC1 polish: executable version resource identifies ByteForge.
 
 format PE GUI 4.0
 entry start
@@ -138,12 +139,12 @@ FONT_CONSOLAS       = 3
 
 section '.data' data readable writeable
 
-VERSION_W           du 'ByteForge 1.0 beta 7',0
-APP_CLASS           du 'ByteForge10b7Class',0
-APP_TITLE           du 'ByteForge 1.0 beta 7',0
-CHECKSUM_CLASS      du 'ByteForge10b7ChecksumClass',0
-JUMP_CLASS          du 'ByteForge10b7JumpClass',0
-FILEINFO_CLASS      du 'ByteForge10b7FileInfoClass',0
+VERSION_W           du 'ByteForge 1.0 RC1',0
+APP_CLASS           du 'ByteForge10RC1Class',0
+APP_TITLE           du 'ByteForge 1.0 RC1',0
+CHECKSUM_CLASS      du 'ByteForge10RC1ChecksumClass',0
+JUMP_CLASS          du 'ByteForge10RC1JumpClass',0
+FILEINFO_CLASS      du 'ByteForge10RC1FileInfoClass',0
 EDIT_CLASS          du 'RICHEDIT50W',0
 WINEDIT_CLASS       du 'EDIT',0
 BUTTON_CLASS        du 'BUTTON',0
@@ -357,7 +358,7 @@ menuHexRightTxt du 'Hex view &right',0
 menuHexBelowTxt du 'Hex view &below',0
 menuHexCloseTxt du '&Close hex view',0
 menuChecksumTxt du '&Checksum of File',0
-aboutTxt du 'ByteForge 1.0 beta 7',13,10,'Small and fast text editor without fluff.',13,10,'Single EXE, no CRT, standard Windows DLLs only.',0
+aboutTxt du 'ByteForge 1.0 RC1',13,10,'Small and fast text editor without fluff.',13,10,'Single EXE, no CRT, standard Windows DLLs only.',13,10,13,10,'Security issues and bugs: jaapengel79@proton.me',0
 findNotFoundTxt du 'No more matches found.',0
 SAVE_FAIL_PREFIX du 'Save failed. GetLastError = ',0
 HEX_LIMIT_TXT du 'Hex preview limited to first 64 KB.',0
@@ -2650,7 +2651,7 @@ SetHexBytesPerLine:
     ; of bytes per row for the monospace dump so wide panes use their space.
     push ebx
     push edx
-    sub eax,15                   ; ByteForge beta 7: compact 15px right margin
+    sub eax,15                   ; ByteForge RC1: compact 15px right margin
     cmp eax,160
     jge .width_ok
     mov eax,160
@@ -2944,7 +2945,7 @@ UpdateHexPreviewFromBuffer:
     jmp .free_text
 
 .has_text:
-    ; For buffer preview, encode as UTF-8 with BOM. This matches TinyEdit's
+    ; For buffer preview, encode as UTF-8 with BOM. This matches ByteForge's
     ; default new-file save behavior and keeps the preview byte-oriented.
     invoke WideCharToMultiByte,CP_UTF8,0,[hexTextPtr],[hexChars],0,0,0,0
     test eax,eax
@@ -3955,11 +3956,11 @@ section '.rsrc' resource data readable
 
   versioninfo version,4,1,0,0409h,04E4h,\
               'FileDescription','Small and fast text editor without fluff',\
-              'FileVersion','1.0.0.7',\
+              'FileVersion','1.0.0.1',\
               'InternalName','ByteForge',\
-              'OriginalFilename','ByteForge.exe',\
+              'OriginalFilename','Byteforge.exe',\
               'ProductName','ByteForge',\
-              'ProductVersion','1.0.0.7'
+              'ProductVersion','1.0.0.1'
 
 section '.idata' import data readable writeable
 

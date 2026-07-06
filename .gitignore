@@ -9,7 +9,6 @@
 Thumbs.db
 desktop.ini
 
-# Keep the current private beta binary, ignore ad-hoc local binaries.
+# Keep the current release binary, ignore ad-hoc local binaries.
 *.exe
-!dist/ByteForge_beta7.exe
-
+!dist/Byteforge.exe

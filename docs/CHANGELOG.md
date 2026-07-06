@@ -1,8 +1,15 @@
 # Changelog
 
+## 1.0 RC1
+
+- Promoted ByteForge to 1.0 RC1.
+- Standardized release executable name to `Byteforge.exe`.
+- Added public bug/security reporting contact: `jaapengel79@proton.me`.
+- Removed remaining legacy project-name references from source and documentation.
+
 ## 1.0 beta 7
 
-- Renamed application branding from TinyEdit to ByteForge.
+- Renamed application branding to ByteForge.
 - Added executable version resource metadata:
   - `InternalName`: ByteForge
   - `ProductName`: ByteForge
@@ -21,4 +28,3 @@
 - Added Explorer file association / Open With startup support.
 - Added Unicode command-line parsing with `GetCommandLineW` and `CommandLineToArgvW`.
 - Unified Drag & Drop, File Open, Open With and Explorer startup through the same open implementation.
-

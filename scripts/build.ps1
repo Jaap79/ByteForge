@@ -1,7 +1,7 @@
 param(
     [string]$FasmPath = "C:\LOOT\FASM\FASM.EXE",
     [string]$Source = "$PSScriptRoot\..\src\ByteForge.asm",
-    [string]$Output = "$PSScriptRoot\..\dist\ByteForge_beta7.exe"
+    [string]$Output = "$PSScriptRoot\..\dist\Byteforge.exe"
 )
 
 $ErrorActionPreference = "Stop"

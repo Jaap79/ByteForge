@@ -1,6 +1,6 @@
 # Release Checklist
 
-## RC1 Candidate Checks
+## 1.0 RC1 Checks
 
 - [ ] Open empty document.
 - [ ] Open UTF-8 file with BOM.
@@ -20,11 +20,13 @@
 - [ ] Confirm File Info values and colors.
 - [ ] Test text zoom in/out/reset.
 - [ ] Resize hex viewer left/right/below.
+- [ ] Verify executable name is `Byteforge.exe`.
 - [ ] Verify executable VersionInfo in Explorer.
+- [ ] Verify About dialog shows `ByteForge 1.0 RC1`.
+- [ ] Verify About dialog shows `jaapengel79@proton.me`.
 
 ## Build Command
 
 ```powershell
 .\scripts\build.ps1
 ```
-

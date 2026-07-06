@@ -19,10 +19,10 @@ gh auth logout -h github.com -u Jaap79
 gh auth login --hostname github.com --web --git-protocol https --scopes repo
 ```
 
-## Create Private Repository
+## Create Repository
 
 ```powershell
-gh repo create Jaap79/ByteForge --private --source . --remote origin --push --description "Small and fast text editor without fluff"
+gh repo create Jaap79/ByteForge --public --source . --remote origin --push --description "Small and fast text editor without fluff"
 ```
 
 ## Verify
@@ -31,4 +31,3 @@ gh repo create Jaap79/ByteForge --private --source . --remote origin --push --de
 gh repo view Jaap79/ByteForge --json nameWithOwner,visibility,url
 git status -sb
 ```
-

@@ -2,14 +2,14 @@
 
 Small and fast text editor without fluff.
 
-ByteForge is a compact Win32 Unicode text editor written in pure FASM. It is currently in private beta and is built as a single native Windows executable with no CRT and no bundled external DLL dependencies.
+ByteForge is a compact Win32 Unicode text editor written in pure FASM. It is built as a single native Windows executable with no CRT and no bundled external DLL dependencies.
 
 ## Current Version
 
 - Product: ByteForge
-- Version: 1.0 beta 7
+- Version: 1.0 RC1
 - Source: `src/ByteForge.asm`
-- Current beta build: `dist/ByteForge_beta7.exe`
+- Current build: `dist/Byteforge.exe`
 
 ## Highlights
 
@@ -57,5 +57,12 @@ scripts/              Local build helpers
 
 ## Status
 
-Private beta. Next intended milestone: RC1 cleanup and test pass.
+Release Candidate 1.
 
+## Reporting Bugs and Security Issues
+
+Please report bugs and security-related issues to:
+
+```text
+jaapengel79@proton.me
+```
