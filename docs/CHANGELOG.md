@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0 RC2 beta 4
+
+- Improved Markdown Preview using a clearer block/inline pass inspired by CommonMark parsing.
+- Made preview body text proportional so code blocks visibly switch to monospace.
+- Made ATX headings larger and bold by level.
+- Added support for both backtick and tilde fenced code blocks.
+- Indented fenced code block contents slightly for readability.
+
 ## 1.0 RC2 beta 3
 
 - Simplified Markdown Preview styling to avoid syntax-highlighting colors.
