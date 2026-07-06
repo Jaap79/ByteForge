@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0 RC2 beta 1
+
+- Added View -> Markdown Preview with Ctrl+M.
+- Markdown Preview uses a compact built-in RichEdit preview layer; source text remains unchanged for editing and saving.
+- Added save prompts before New, Open, Drag & Drop and Exit when the current document has unsaved changes.
+- New unsaved files use Save As from the existing save routine; existing modified files save in place.
+
 ## 1.0 RC1
 
 - Added manual Help -> Check for Updates using the public repository `version.json`.
