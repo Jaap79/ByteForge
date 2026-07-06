@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0 RC2 beta 3
+
+- Simplified Markdown Preview styling to avoid syntax-highlighting colors.
+- Reset preview formatting before each render to prevent stale RichEdit color/bold runs.
+- Kept Markdown formatting sober: headings bold, emphasis italic/bold and code monospace.
+
 ## 1.0 RC2 beta 2
 
 - Improved Markdown Preview rendering so common Markdown markers are stripped from preview text.

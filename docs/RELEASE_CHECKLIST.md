@@ -1,6 +1,6 @@
 # Release Checklist
 
-## 1.0 RC2 beta 2 Checks
+## 1.0 RC2 beta 3 Checks
 
 - [ ] Open empty document.
 - [ ] Open UTF-8 file with BOM.
@@ -22,11 +22,13 @@
 - [ ] Toggle Markdown Preview with View -> Markdown Preview and Ctrl+M.
 - [ ] Confirm Markdown Preview does not alter saved Markdown source.
 - [ ] Confirm headings, lists and fenced code render without raw Markdown markers.
+- [ ] Confirm Markdown Preview uses no yellow/green syntax-highlighting colors.
+- [ ] Confirm bold, italic and code formatting render soberly.
 - [ ] Confirm New/Open/Drag & Drop/Exit prompts to save unsaved changes.
 - [ ] Resize hex viewer left/right/below.
 - [ ] Verify executable name is `Byteforge.exe`.
 - [ ] Verify executable VersionInfo in Explorer.
-- [ ] Verify About dialog shows `ByteForge 1.0 RC2 beta 2`.
+- [ ] Verify About dialog shows `ByteForge 1.0 RC2 beta 3`.
 - [ ] Verify About dialog shows `jaapengel79@proton.me`.
 - [ ] Verify Help -> Check for Updates reports the current release correctly.
 

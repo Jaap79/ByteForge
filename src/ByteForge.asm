@@ -1,4 +1,4 @@
-; ByteForge 1.0 RC2 beta 2 - pure FASM / Win32 Unicode
+; ByteForge 1.0 RC2 beta 3 - pure FASM / Win32 Unicode
 ; Build: fasm src\ByteForge.asm dist\Byteforge.exe
 ;
 ; Goals:
@@ -13,9 +13,9 @@
 ;   ByteForge's OpenFileDocument implementation
 ; - Selectable checksum window with optional expected MD5/SHA-256
 ;   verification, one-shot "no more matches" notice, and editor Ctrl+/- zoom.
-; - RC2 beta 2: View->Markdown Preview (Ctrl+M) uses a compact, built-in
+; - RC2 beta 3: View->Markdown Preview (Ctrl+M) uses a compact, built-in
 ;   RichEdit preview layer; source text remains untouched for editing/saving.
-; - RC2 beta 2: closing, New, Open and Drag & Drop prompt to save unsaved
+; - RC2 beta 3: closing, New, Open and Drag & Drop prompt to save unsaved
 ;   changes; new documents use Save As, existing documents save in place.
 ; - Security issues and bugs can be reported to jaapengel79@proton.me.
 ; - Window title contains full path + '*' when modified
@@ -153,16 +153,16 @@ FONT_CONSOLAS       = 3
 LOCAL_VER_MAJOR     = 1
 LOCAL_VER_MINOR     = 0
 LOCAL_VER_PATCH     = 0
-LOCAL_VER_BUILD     = 3
+LOCAL_VER_BUILD     = 4
 
 section '.data' data readable writeable
 
-VERSION_W           du 'ByteForge 1.0 RC2 beta 2',0
-APP_CLASS           du 'ByteForge10RC2B2Class',0
-APP_TITLE           du 'ByteForge 1.0 RC2 beta 2',0
-CHECKSUM_CLASS      du 'ByteForge10RC2B2ChecksumClass',0
-JUMP_CLASS          du 'ByteForge10RC2B2JumpClass',0
-FILEINFO_CLASS      du 'ByteForge10RC2B2FileInfoClass',0
+VERSION_W           du 'ByteForge 1.0 RC2 beta 3',0
+APP_CLASS           du 'ByteForge10RC2B3Class',0
+APP_TITLE           du 'ByteForge 1.0 RC2 beta 3',0
+CHECKSUM_CLASS      du 'ByteForge10RC2B3ChecksumClass',0
+JUMP_CLASS          du 'ByteForge10RC2B3JumpClass',0
+FILEINFO_CLASS      du 'ByteForge10RC2B3FileInfoClass',0
 EDIT_CLASS          du 'RICHEDIT50W',0
 WINEDIT_CLASS       du 'EDIT',0
 BUTTON_CLASS        du 'BUTTON',0
@@ -292,6 +292,9 @@ mdLineStart dd 0
 mdLineEnd   dd 0
 mdLineStyle dd 0
 mdCodeBlock dd 0
+mdBoldStart dd 0
+mdItalicStart dd 0
+mdCodeStart dd 0
 bytesIO     dd 0
 fileSize    dd 0
 tmpPtr      dd 0
@@ -398,7 +401,7 @@ menuHexRightTxt du 'Hex view &right',0
 menuHexBelowTxt du 'Hex view &below',0
 menuHexCloseTxt du '&Close hex view',0
 menuChecksumTxt du '&Checksum of File',0
-aboutTxt du 'ByteForge 1.0 RC2 beta 2',13,10,'Small and fast text editor without fluff.',13,10,'Single EXE, no CRT, standard Windows DLLs only.',13,10,13,10,'Security issues and bugs: jaapengel79@proton.me',0
+aboutTxt du 'ByteForge 1.0 RC2 beta 3',13,10,'Small and fast text editor without fluff.',13,10,'Single EXE, no CRT, standard Windows DLLs only.',13,10,13,10,'Security issues and bugs: jaapengel79@proton.me',0
 savePromptTxt du 'Save changes before continuing?',0
 findNotFoundTxt du 'No more matches found.',0
 SAVE_FAIL_PREFIX du 'Save failed. GetLastError = ',0
@@ -429,7 +432,7 @@ checksumShaSkippedTxt du 'SHA-256: not checked',13,10,0
 updateTitleTxt du 'Check for Updates',0
 updateAgentTxt du 'ByteForge update check',0
 updateUrlTxt du 'https://raw.githubusercontent.com/Jaap79/ByteForge/main/version.json',0
-updateCurrentTxt du 'ByteForge 1.0 RC2 beta 2 (1.0.0.3)',0
+updateCurrentTxt du 'ByteForge 1.0 RC2 beta 3 (1.0.0.4)',0
 updateAvailableTxt du 'A newer ByteForge version is available.',13,10,13,10,'Current: ',0
 updateCurrentLatestTxt du 'ByteForge is up to date.',13,10,13,10,'Current: ',0
 updateLatestTxt du 13,10,'Latest: ',0
@@ -1488,7 +1491,7 @@ CreateEditorControl:
     ret
 
 CreateMarkdownPreviewControl:
-    ; RC2 beta 2: Markdown Preview is a separate read-only RichEdit layer.
+    ; RC2 beta 3: Markdown Preview is a separate read-only RichEdit layer.
     ; The real editor buffer is never replaced, so Save/Save As always writes
     ; the original Markdown source text.
     invoke CreateWindowEx,WS_EX_CLIENTEDGE,EDIT_CLASS,0,WS_CHILD or WS_VSCROLL or ES_MULTILINE or ES_AUTOVSCROLL or ES_NOHIDESEL or ES_READONLY,0,0,0,0,[parentHwnd],0,[hInst],0
@@ -1551,7 +1554,7 @@ RenderMarkdownPreview:
     invoke SendMessage,[hwndMdPreview],WM_SETREDRAW,FALSE,0
     invoke SetWindowText,[hwndMdPreview],[convPtr]
     invoke SendMessage,[hwndMdPreview],WM_SETFONT,[hEditorFont],TRUE
-    call ApplyRichEditTextColor
+    call ResetMarkdownPreviewFormatting
     call ApplyMarkdownPreviewFormatting
     invoke SendMessage,[hwndMdPreview],EM_SETSEL,0,0
     invoke SendMessage,[hwndMdPreview],WM_SETREDRAW,TRUE,0
@@ -1562,6 +1565,38 @@ RenderMarkdownPreview:
     invoke GlobalFree,[tmpPtr]
     mov [tmpPtr],0
 .ret:
+    ret
+
+ResetMarkdownPreviewFormatting:
+    ; RC2 beta 3: normalize the preview before applying Markdown formatting.
+    ; This prevents old RichEdit runs from leaving random colors/bold text.
+    invoke SendMessage,[hwndMdPreview],EM_SETSEL,0,-1
+    invoke RtlZeroMemory,charFmt,CHARFORMATW_SIZE
+    mov dword [charFmt],CHARFORMATW_SIZE
+    mov dword [charFmt+4],CFM_COLOR or CFM_BOLD or CFM_ITALIC or CFM_FACE
+    mov dword [charFmt+8],0
+    mov eax,[textColor]
+    mov dword [charFmt+20],eax
+    cmp [editorFontChoice],FONT_SEGOE
+    je .segoe
+    cmp [editorFontChoice],FONT_GEORGIA
+    je .georgia
+    cmp [editorFontChoice],FONT_CONSOLAS
+    je .consolas
+    mov esi,FONT_DEFAULT_FACE
+    jmp .copy_face
+.segoe:
+    mov esi,FONT_SEGOE_FACE
+    jmp .copy_face
+.georgia:
+    mov esi,FONT_GEORGIA_FACE
+    jmp .copy_face
+.consolas:
+    mov esi,FONT_CONSOLAS_FACE
+.copy_face:
+    mov edi,charFmt+26
+    call StrCopyW
+    invoke SendMessage,[hwndMdPreview],EM_SETCHARFORMAT,SCF_SELECTION,charFmt
     ret
 
 BuildMarkdownPreviewText:
@@ -1720,6 +1755,11 @@ SkipMarkdownSourceLine:
     ret
 
 ApplyMarkdownPreviewFormatting:
+    call ApplyMarkdownLineFormatting
+    call ApplyMarkdownInlineFormatting
+    ret
+
+ApplyMarkdownLineFormatting:
     mov [mdCodeBlock],0
     mov esi,[tmpPtr]
     xor ecx,ecx
@@ -1863,41 +1903,201 @@ ApplyMarkdownLineStyle:
     je .md_code
     jmp .ret
 .heading:
-    mov dword [charFmt+4],CFM_BOLD or CFM_SIZE or CFM_COLOR
-    mov dword [charFmt+8],CFE_BOLD
-    mov dword [charFmt+12],320
-    cmp [darkmode],0
-    je .heading_light
-    mov dword [charFmt+20],00D7FFh
-    jmp .send
-.heading_light:
-    mov dword [charFmt+20],804000h
-    jmp .send
-.quote:
-    mov dword [charFmt+4],CFM_ITALIC or CFM_COLOR
-    mov dword [charFmt+8],CFE_ITALIC
-    cmp [darkmode],0
-    je .quote_light
-    mov dword [charFmt+20],0C0C0C0h
-    jmp .send
-.quote_light:
-    mov dword [charFmt+20],606060h
-    jmp .send
-.list:
     mov dword [charFmt+4],CFM_BOLD
     mov dword [charFmt+8],CFE_BOLD
     jmp .send
+.quote:
+    mov dword [charFmt+4],CFM_ITALIC
+    mov dword [charFmt+8],CFE_ITALIC
+    jmp .send
+.list:
+    ret
 .md_code:
-    mov dword [charFmt+4],CFM_FACE or CFM_COLOR
+    mov dword [charFmt+4],CFM_FACE
     mov esi,HEX_FONT_FACE
     mov edi,charFmt+26
     call StrCopyW
-    cmp [darkmode],0
-    je .md_code_light
-    mov dword [charFmt+20],90EE90h
+.send:
+    invoke SendMessage,[hwndMdPreview],EM_SETCHARFORMAT,SCF_SELECTION,charFmt
+.ret:
+    ret
+
+ApplyMarkdownInlineFormatting:
+    ; Sober inline Markdown formatting on the cleaned preview text.
+    ; Markers were stripped while building convPtr, so this pass maps source
+    ; positions to preview positions and applies only bold/italic/monospace.
+    mov [mdCodeBlock],0
+    mov [mdBoldStart],-1
+    mov [mdItalicStart],-1
+    mov [mdCodeStart],-1
+    mov esi,[tmpPtr]
+    xor ecx,ecx
+.line_loop:
+    mov ax,[esi]
+    test ax,ax
+    jz .done
+    cmp ax,'`'
+    jne .not_fence
+    cmp word [esi+2],'`'
+    jne .not_fence
+    cmp word [esi+4],'`'
+    jne .not_fence
+    xor [mdCodeBlock],1
+    call SkipMarkdownSourceLine
+    jmp .line_loop
+.not_fence:
+    mov ebx,esi
+    cmp [mdCodeBlock],0
+    jne .scan_line
+    cmp ax,'#'
+    jne .not_heading
+    call CountMarkdownHashes
+    jmp .scan_line
+.not_heading:
+    cmp ax,'>'
+    jne .not_quote
+    add ebx,2
+    cmp word [ebx],' '
+    jne .scan_line
+    add ebx,2
+    jmp .scan_line
+.not_quote:
+    cmp ax,'-'
+    je .maybe_bullet
+    cmp ax,'*'
+    je .maybe_bullet
+    cmp ax,'0'
+    jb .scan_line
+    cmp ax,'9'
+    ja .scan_line
+    call TryMarkdownNumberedList
+    test eax,eax
+    jz .scan_line
+    add ecx,2
+    jmp .scan_line
+.maybe_bullet:
+    cmp word [esi+2],' '
+    jne .scan_line
+    add ebx,4
+    add ecx,2
+.scan_line:
+    mov ax,[ebx]
+    test ax,ax
+    jz .done
+    cmp ax,13
+    je .line_end
+    cmp ax,10
+    je .line_end
+    cmp [mdCodeBlock],0
+    jne .plain_char
+    cmp ax,'`'
+    je .toggle_code
+    cmp ax,'*'
+    jne .plain_char
+    cmp word [ebx+2],'*'
+    je .toggle_bold
+    jmp .toggle_italic
+.toggle_bold:
+    cmp [mdBoldStart],-1
+    je .open_bold
+    push ebx
+    mov eax,[mdBoldStart]
+    mov edx,ecx
+    mov ebx,1
+    call ApplyMarkdownSpanStyle
+    pop ebx
+    mov [mdBoldStart],-1
+    add ebx,4
+    jmp .scan_line
+.open_bold:
+    mov [mdBoldStart],ecx
+    add ebx,4
+    jmp .scan_line
+.toggle_italic:
+    cmp [mdItalicStart],-1
+    je .open_italic
+    push ebx
+    mov eax,[mdItalicStart]
+    mov edx,ecx
+    mov ebx,2
+    call ApplyMarkdownSpanStyle
+    pop ebx
+    mov [mdItalicStart],-1
+    add ebx,2
+    jmp .scan_line
+.open_italic:
+    mov [mdItalicStart],ecx
+    add ebx,2
+    jmp .scan_line
+.toggle_code:
+    cmp [mdCodeStart],-1
+    je .open_code
+    push ebx
+    mov eax,[mdCodeStart]
+    mov edx,ecx
+    mov ebx,4
+    call ApplyMarkdownSpanStyle
+    pop ebx
+    mov [mdCodeStart],-1
+    add ebx,2
+    jmp .scan_line
+.open_code:
+    mov [mdCodeStart],ecx
+    add ebx,2
+    jmp .scan_line
+.plain_char:
+    inc ecx
+    add ebx,2
+    jmp .scan_line
+.line_end:
+    mov [mdBoldStart],-1
+    mov [mdItalicStart],-1
+    mov [mdCodeStart],-1
+    cmp ax,13
+    jne .lf_only
+    add ebx,2
+    inc ecx
+    cmp word [ebx],10
+    jne .next_line
+    add ebx,2
+    inc ecx
+    jmp .next_line
+.lf_only:
+    add ebx,2
+    inc ecx
+.next_line:
+    mov esi,ebx
+    jmp .line_loop
+.done:
+    ret
+
+ApplyMarkdownSpanStyle:
+    ; EAX=start, EDX=end, EBX=style: 1 bold, 2 italic, 4 code face.
+    cmp edx,eax
+    jle .ret
+    invoke SendMessage,[hwndMdPreview],EM_SETSEL,eax,edx
+    invoke RtlZeroMemory,charFmt,CHARFORMATW_SIZE
+    mov dword [charFmt],CHARFORMATW_SIZE
+    cmp ebx,1
+    je .bold
+    cmp ebx,2
+    je .italic
+    cmp ebx,4
+    je .inline_code
+    jmp .ret
+.bold:
+    mov dword [charFmt+4],CFM_BOLD
+    mov dword [charFmt+8],CFE_BOLD
     jmp .send
-.md_code_light:
-    mov dword [charFmt+20],008000h
+.italic:
+    mov dword [charFmt+4],CFM_ITALIC
+    mov dword [charFmt+8],CFE_ITALIC
+    jmp .send
+.inline_code:
+    mov dword [charFmt+4],CFM_FACE
+    mov esi,HEX_FONT_FACE
+    mov edi,charFmt+26
+    call StrCopyW
 .send:
     invoke SendMessage,[hwndMdPreview],EM_SETCHARFORMAT,SCF_SELECTION,charFmt
 .ret:
@@ -2079,7 +2279,7 @@ DoSaveAsDialog:
     ret
 
 PromptSaveIfModified:
-    ; RC2 beta 2: central guard for destructive document changes.
+    ; RC2 beta 3: central guard for destructive document changes.
     ; Returns EAX=1 to continue, EAX=0 to cancel the caller's action.
     cmp [modified],0
     jne .ask
@@ -4825,11 +5025,11 @@ section '.rsrc' resource data readable
 
   versioninfo version,4,1,0,0409h,04E4h,\
               'FileDescription','Small and fast text editor without fluff',\
-              'FileVersion','1.0.0.3',\
+              'FileVersion','1.0.0.4',\
               'InternalName','ByteForge',\
               'OriginalFilename','Byteforge.exe',\
               'ProductName','ByteForge',\
-              'ProductVersion','1.0.0.3'
+              'ProductVersion','1.0.0.4'
 
 section '.idata' import data readable writeable
 
