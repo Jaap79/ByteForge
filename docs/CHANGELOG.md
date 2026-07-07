@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0 RC2 beta 5
+
+- Open `.md` and `.markdown` files directly in Markdown Preview.
+- Keep View -> Markdown Preview as a manual toggle back to raw Markdown source.
+- Reset Markdown Preview when creating a new file.
+
 ## 1.0 RC2 beta 4
 
 - Improved Markdown Preview using a clearer block/inline pass inspired by CommonMark parsing.

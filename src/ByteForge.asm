@@ -1,4 +1,4 @@
-; ByteForge 1.0 RC2 beta 4 - pure FASM / Win32 Unicode
+; ByteForge 1.0 RC2 beta 5 - pure FASM / Win32 Unicode
 ; Build: fasm src\ByteForge.asm dist\Byteforge.exe
 ;
 ; Goals:
@@ -13,9 +13,10 @@
 ;   ByteForge's OpenFileDocument implementation
 ; - Selectable checksum window with optional expected MD5/SHA-256
 ;   verification, one-shot "no more matches" notice, and editor Ctrl+/- zoom.
-; - RC2 beta 4: View->Markdown Preview (Ctrl+M) uses a compact, built-in
+; - RC2 beta 5: View->Markdown Preview (Ctrl+M) uses a compact, built-in
 ;   RichEdit preview layer; source text remains untouched for editing/saving.
-; - RC2 beta 4: closing, New, Open and Drag & Drop prompt to save unsaved
+; - RC2 beta 5: .md/.markdown files open in Markdown Preview automatically.
+; - RC2 beta 5: closing, New, Open and Drag & Drop prompt to save unsaved
 ;   changes; new documents use Save As, existing documents save in place.
 ; - Security issues and bugs can be reported to jaapengel79@proton.me.
 ; - Window title contains full path + '*' when modified
@@ -153,16 +154,16 @@ FONT_CONSOLAS       = 3
 LOCAL_VER_MAJOR     = 1
 LOCAL_VER_MINOR     = 0
 LOCAL_VER_PATCH     = 0
-LOCAL_VER_BUILD     = 5
+LOCAL_VER_BUILD     = 6
 
 section '.data' data readable writeable
 
-VERSION_W           du 'ByteForge 1.0 RC2 beta 4',0
-APP_CLASS           du 'ByteForge10RC2B4Class',0
-APP_TITLE           du 'ByteForge 1.0 RC2 beta 4',0
-CHECKSUM_CLASS      du 'ByteForge10RC2B4ChecksumClass',0
-JUMP_CLASS          du 'ByteForge10RC2B4JumpClass',0
-FILEINFO_CLASS      du 'ByteForge10RC2B4FileInfoClass',0
+VERSION_W           du 'ByteForge 1.0 RC2 beta 5',0
+APP_CLASS           du 'ByteForge10RC2B5Class',0
+APP_TITLE           du 'ByteForge 1.0 RC2 beta 5',0
+CHECKSUM_CLASS      du 'ByteForge10RC2B5ChecksumClass',0
+JUMP_CLASS          du 'ByteForge10RC2B5JumpClass',0
+FILEINFO_CLASS      du 'ByteForge10RC2B5FileInfoClass',0
 EDIT_CLASS          du 'RICHEDIT50W',0
 WINEDIT_CLASS       du 'EDIT',0
 BUTTON_CLASS        du 'BUTTON',0
@@ -402,7 +403,7 @@ menuHexRightTxt du 'Hex view &right',0
 menuHexBelowTxt du 'Hex view &below',0
 menuHexCloseTxt du '&Close hex view',0
 menuChecksumTxt du '&Checksum of File',0
-aboutTxt du 'ByteForge 1.0 RC2 beta 4',13,10,'Small and fast text editor without fluff.',13,10,'Single EXE, no CRT, standard Windows DLLs only.',13,10,13,10,'Security issues and bugs: jaapengel79@proton.me',0
+aboutTxt du 'ByteForge 1.0 RC2 beta 5',13,10,'Small and fast text editor without fluff.',13,10,'Single EXE, no CRT, standard Windows DLLs only.',13,10,13,10,'Security issues and bugs: jaapengel79@proton.me',0
 savePromptTxt du 'Save changes before continuing?',0
 findNotFoundTxt du 'No more matches found.',0
 SAVE_FAIL_PREFIX du 'Save failed. GetLastError = ',0
@@ -433,7 +434,7 @@ checksumShaSkippedTxt du 'SHA-256: not checked',13,10,0
 updateTitleTxt du 'Check for Updates',0
 updateAgentTxt du 'ByteForge update check',0
 updateUrlTxt du 'https://raw.githubusercontent.com/Jaap79/ByteForge/main/version.json',0
-updateCurrentTxt du 'ByteForge 1.0 RC2 beta 4 (1.0.0.5)',0
+updateCurrentTxt du 'ByteForge 1.0 RC2 beta 5 (1.0.0.6)',0
 updateAvailableTxt du 'A newer ByteForge version is available.',13,10,13,10,'Current: ',0
 updateCurrentLatestTxt du 'ByteForge is up to date.',13,10,13,10,'Current: ',0
 updateLatestTxt du 13,10,'Latest: ',0
@@ -1492,7 +1493,7 @@ CreateEditorControl:
     ret
 
 CreateMarkdownPreviewControl:
-    ; RC2 beta 4: Markdown Preview is a separate read-only RichEdit layer.
+    ; RC2 beta 5: Markdown Preview is a separate read-only RichEdit layer.
     ; The real editor buffer is never replaced, so Save/Save As always writes
     ; the original Markdown source text.
     invoke CreateWindowEx,WS_EX_CLIENTEDGE,EDIT_CLASS,0,WS_CHILD or WS_VSCROLL or ES_MULTILINE or ES_AUTOVSCROLL or ES_NOHIDESEL or ES_READONLY,0,0,0,0,[parentHwnd],0,[hInst],0
@@ -1569,7 +1570,7 @@ RenderMarkdownPreview:
     ret
 
 ResetMarkdownPreviewFormatting:
-    ; RC2 beta 4: normalize the preview before applying Markdown formatting.
+    ; RC2 beta 5: normalize the preview before applying Markdown formatting.
     ; This prevents old RichEdit runs from leaving random colors/bold text.
     invoke SendMessage,[hwndMdPreview],EM_SETSEL,0,-1
     invoke RtlZeroMemory,charFmt,CHARFORMATW_SIZE
@@ -2211,6 +2212,10 @@ ApplyWordWrap:
     ret
 
 NewFile:
+    cmp [markdownPreview],0
+    je .preview_off
+    call ToggleMarkdownPreview
+.preview_off:
     invoke SetWindowText,[hwndEdit],0
     cmp [hwndMdPreview],0
     je .no_preview_text
@@ -2229,7 +2234,6 @@ NewFile:
 .no_hex_clear:
     call UpdateTitle
     call UpdateStatus
-    call UpdateMarkdownPreviewIfVisible
     ret
 
 PrepareOFN:
@@ -2326,7 +2330,7 @@ DoSaveAsDialog:
     ret
 
 PromptSaveIfModified:
-    ; RC2 beta 4: central guard for destructive document changes.
+    ; RC2 beta 5: central guard for destructive document changes.
     ; Returns EAX=1 to continue, EAX=0 to cancel the caller's action.
     cmp [modified],0
     jne .ask
@@ -2398,9 +2402,108 @@ LoadFile:
     mov [hexDirty],1
     call UpdateTitle
     call UpdateStatus
-    call UpdateMarkdownPreviewIfVisible
+    call ApplyMarkdownModeForCurrentFile
     call UpdateHexPreview
 .done:
+    ret
+
+ApplyMarkdownModeForCurrentFile:
+    ; RC2 beta 5: Markdown files open directly in preview mode. The View menu
+    ; toggle still switches back to raw source when desired.
+    call IsMarkdownFilePath
+    test eax,eax
+    jz .not_markdown
+    cmp [markdownPreview],0
+    jne .render_current
+    call ToggleMarkdownPreview
+    ret
+.render_current:
+    call RenderMarkdownPreview
+    ret
+.not_markdown:
+    cmp [markdownPreview],0
+    je .ret
+    call ToggleMarkdownPreview
+.ret:
+    ret
+
+IsMarkdownFilePath:
+    cmp word [filePath],0
+    jne .scan
+    xor eax,eax
+    ret
+.scan:
+    mov esi,filePath
+    xor ebx,ebx
+.scan_loop:
+    mov ax,[esi]
+    test ax,ax
+    jz .got_end
+    cmp ax,'.'
+    jne .next_char
+    mov ebx,esi
+.next_char:
+    add esi,2
+    jmp .scan_loop
+.got_end:
+    test ebx,ebx
+    jz .no
+    mov esi,ebx
+    mov ax,[esi+2]
+    call LowerAsciiW
+    cmp ax,'m'
+    jne .no
+    mov ax,[esi+4]
+    call LowerAsciiW
+    cmp ax,'d'
+    jne .check_markdown
+    cmp word [esi+6],0
+    je .yes
+.check_markdown:
+    mov ax,[esi+4]
+    call LowerAsciiW
+    cmp ax,'a'
+    jne .no
+    mov ax,[esi+6]
+    call LowerAsciiW
+    cmp ax,'r'
+    jne .no
+    mov ax,[esi+8]
+    call LowerAsciiW
+    cmp ax,'k'
+    jne .no
+    mov ax,[esi+10]
+    call LowerAsciiW
+    cmp ax,'d'
+    jne .no
+    mov ax,[esi+12]
+    call LowerAsciiW
+    cmp ax,'o'
+    jne .no
+    mov ax,[esi+14]
+    call LowerAsciiW
+    cmp ax,'w'
+    jne .no
+    mov ax,[esi+16]
+    call LowerAsciiW
+    cmp ax,'n'
+    jne .no
+    cmp word [esi+18],0
+    jne .no
+.yes:
+    mov eax,1
+    ret
+.no:
+    xor eax,eax
+    ret
+
+LowerAsciiW:
+    cmp ax,'A'
+    jb .ret
+    cmp ax,'Z'
+    ja .ret
+    add ax,32
+.ret:
     ret
 
 DecodeToEdit:
@@ -5072,11 +5175,11 @@ section '.rsrc' resource data readable
 
   versioninfo version,4,1,0,0409h,04E4h,\
               'FileDescription','Small and fast text editor without fluff',\
-              'FileVersion','1.0.0.5',\
+              'FileVersion','1.0.0.6',\
               'InternalName','ByteForge',\
               'OriginalFilename','Byteforge.exe',\
               'ProductName','ByteForge',\
-              'ProductVersion','1.0.0.5'
+              'ProductVersion','1.0.0.6'
 
 section '.idata' import data readable writeable
 
