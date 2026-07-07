@@ -1,4 +1,4 @@
-; ByteForge 1.0 RC2 beta 5 - pure FASM / Win32 Unicode
+; ByteForge 1.0 RC2 beta 6 - pure FASM / Win32 Unicode
 ; Build: fasm src\ByteForge.asm dist\Byteforge.exe
 ;
 ; Goals:
@@ -13,10 +13,12 @@
 ;   ByteForge's OpenFileDocument implementation
 ; - Selectable checksum window with optional expected MD5/SHA-256
 ;   verification, one-shot "no more matches" notice, and editor Ctrl+/- zoom.
-; - RC2 beta 5: View->Markdown Preview (Ctrl+M) uses a compact, built-in
+; - RC2 beta 6: View->Markdown Preview (Ctrl+M) uses a compact, built-in
 ;   RichEdit preview layer; source text remains untouched for editing/saving.
-; - RC2 beta 5: .md/.markdown files open in Markdown Preview automatically.
-; - RC2 beta 5: closing, New, Open and Drag & Drop prompt to save unsaved
+; - RC2 beta 6: .md/.markdown files open in Markdown Preview automatically.
+; - RC2 beta 6: Markdown formatting is applied directly to the source view:
+;   text after # is bold +4pt, after ## bold +2pt, code blocks use Consolas.
+; - RC2 beta 6: closing, New, Open and Drag & Drop prompt to save unsaved
 ;   changes; new documents use Save As, existing documents save in place.
 ; - Security issues and bugs can be reported to jaapengel79@proton.me.
 ; - Window title contains full path + '*' when modified
@@ -154,16 +156,16 @@ FONT_CONSOLAS       = 3
 LOCAL_VER_MAJOR     = 1
 LOCAL_VER_MINOR     = 0
 LOCAL_VER_PATCH     = 0
-LOCAL_VER_BUILD     = 6
+LOCAL_VER_BUILD     = 7
 
 section '.data' data readable writeable
 
-VERSION_W           du 'ByteForge 1.0 RC2 beta 5',0
-APP_CLASS           du 'ByteForge10RC2B5Class',0
-APP_TITLE           du 'ByteForge 1.0 RC2 beta 5',0
-CHECKSUM_CLASS      du 'ByteForge10RC2B5ChecksumClass',0
-JUMP_CLASS          du 'ByteForge10RC2B5JumpClass',0
-FILEINFO_CLASS      du 'ByteForge10RC2B5FileInfoClass',0
+VERSION_W           du 'ByteForge 1.0 RC2 beta 6',0
+APP_CLASS           du 'ByteForge10RC2B6Class',0
+APP_TITLE           du 'ByteForge 1.0 RC2 beta 6',0
+CHECKSUM_CLASS      du 'ByteForge10RC2B6ChecksumClass',0
+JUMP_CLASS          du 'ByteForge10RC2B6JumpClass',0
+FILEINFO_CLASS      du 'ByteForge10RC2B6FileInfoClass',0
 EDIT_CLASS          du 'RICHEDIT50W',0
 WINEDIT_CLASS       du 'EDIT',0
 BUTTON_CLASS        du 'BUTTON',0
@@ -403,7 +405,7 @@ menuHexRightTxt du 'Hex view &right',0
 menuHexBelowTxt du 'Hex view &below',0
 menuHexCloseTxt du '&Close hex view',0
 menuChecksumTxt du '&Checksum of File',0
-aboutTxt du 'ByteForge 1.0 RC2 beta 5',13,10,'Small and fast text editor without fluff.',13,10,'Single EXE, no CRT, standard Windows DLLs only.',13,10,13,10,'Security issues and bugs: jaapengel79@proton.me',0
+aboutTxt du 'ByteForge 1.0 RC2 beta 6',13,10,'Small and fast text editor without fluff.',13,10,'Single EXE, no CRT, standard Windows DLLs only.',13,10,13,10,'Security issues and bugs: jaapengel79@proton.me',0
 savePromptTxt du 'Save changes before continuing?',0
 findNotFoundTxt du 'No more matches found.',0
 SAVE_FAIL_PREFIX du 'Save failed. GetLastError = ',0
@@ -434,7 +436,7 @@ checksumShaSkippedTxt du 'SHA-256: not checked',13,10,0
 updateTitleTxt du 'Check for Updates',0
 updateAgentTxt du 'ByteForge update check',0
 updateUrlTxt du 'https://raw.githubusercontent.com/Jaap79/ByteForge/main/version.json',0
-updateCurrentTxt du 'ByteForge 1.0 RC2 beta 5 (1.0.0.6)',0
+updateCurrentTxt du 'ByteForge 1.0 RC2 beta 6 (1.0.0.7)',0
 updateAvailableTxt du 'A newer ByteForge version is available.',13,10,13,10,'Current: ',0
 updateCurrentLatestTxt du 'ByteForge is up to date.',13,10,13,10,'Current: ',0
 updateLatestTxt du 13,10,'Latest: ',0
@@ -1493,7 +1495,7 @@ CreateEditorControl:
     ret
 
 CreateMarkdownPreviewControl:
-    ; RC2 beta 5: Markdown Preview is a separate read-only RichEdit layer.
+    ; RC2 beta 6: Markdown Preview is a separate read-only RichEdit layer.
     ; The real editor buffer is never replaced, so Save/Save As always writes
     ; the original Markdown source text.
     invoke CreateWindowEx,WS_EX_CLIENTEDGE,EDIT_CLASS,0,WS_CHILD or WS_VSCROLL or ES_MULTILINE or ES_AUTOVSCROLL or ES_NOHIDESEL or ES_READONLY,0,0,0,0,[parentHwnd],0,[hInst],0
@@ -1531,9 +1533,9 @@ UpdateMarkdownPreviewIfVisible:
     ret
 
 RenderMarkdownPreview:
-    ; Compact Markdown Preview: render source Markdown into a cleaner preview
-    ; buffer first, then apply line-based RichEdit formatting. This keeps the
-    ; editor buffer pristine while avoiding visible "#", "```" and list markers.
+    ; RC2 beta 6: compact self-contained Markdown formatting.
+    ; The preview shows the Markdown source text, then styles exact ranges in
+    ; that same text. This avoids fragile source-to-preview offset mapping.
     cmp [hwndMdPreview],0
     je .ret
     invoke SendMessage,[hwndEdit],WM_GETTEXTLENGTH,0,0
@@ -1548,29 +1550,21 @@ RenderMarkdownPreview:
     mov eax,[tmpLen]
     inc eax
     invoke SendMessage,[hwndEdit],WM_GETTEXT,eax,[tmpPtr]
-    invoke GlobalAlloc,GMEM_FIXED or GMEM_ZEROINIT,[tmpSize]
-    test eax,eax
-    jz .free_source
-    mov [convPtr],eax
-    call BuildMarkdownPreviewText
     invoke SendMessage,[hwndMdPreview],WM_SETREDRAW,FALSE,0
-    invoke SetWindowText,[hwndMdPreview],[convPtr]
+    invoke SetWindowText,[hwndMdPreview],[tmpPtr]
     invoke SendMessage,[hwndMdPreview],WM_SETFONT,[hEditorFont],TRUE
     call ResetMarkdownPreviewFormatting
-    call ApplyMarkdownPreviewFormatting
+    call ApplyMarkdownDirectFormatting
     invoke SendMessage,[hwndMdPreview],EM_SETSEL,0,0
     invoke SendMessage,[hwndMdPreview],WM_SETREDRAW,TRUE,0
     invoke InvalidateRect,[hwndMdPreview],0,TRUE
-    invoke GlobalFree,[convPtr]
-    mov [convPtr],0
-.free_source:
     invoke GlobalFree,[tmpPtr]
     mov [tmpPtr],0
 .ret:
     ret
 
 ResetMarkdownPreviewFormatting:
-    ; RC2 beta 5: normalize the preview before applying Markdown formatting.
+    ; RC2 beta 6: normalize the preview before applying Markdown formatting.
     ; This prevents old RichEdit runs from leaving random colors/bold text.
     invoke SendMessage,[hwndMdPreview],EM_SETSEL,0,-1
     invoke RtlZeroMemory,charFmt,CHARFORMATW_SIZE
@@ -1587,6 +1581,126 @@ ResetMarkdownPreviewFormatting:
     mov edi,charFmt+26
     call StrCopyW
     invoke SendMessage,[hwndMdPreview],EM_SETCHARFORMAT,SCF_SELECTION,charFmt
+    ret
+
+ApplyMarkdownDirectFormatting:
+    ; RC2 beta 6: own Markdown-lite pass over the exact preview text.
+    ; - "# heading": style text after "# " as bold +4pt.
+    ; - "## heading": style text after "## " as bold +2pt.
+    ; - fenced code block contents use Consolas/monospace.
+    mov [mdCodeBlock],0
+    mov esi,[tmpPtr]
+    xor ecx,ecx
+.line_loop:
+    mov ax,[esi]
+    test ax,ax
+    jz .done
+    mov [mdLineStart],ecx
+    mov ebx,esi
+    mov [mdLineStyle],0
+    call IsMarkdownFence
+    test eax,eax
+    jz .not_fence
+    xor [mdCodeBlock],1
+    jmp .find_line_end
+.not_fence:
+    cmp [mdCodeBlock],0
+    je .heading_check
+    mov [mdLineStyle],4
+    jmp .find_line_end
+.heading_check:
+    cmp word [esi],'#'
+    jne .find_line_end
+    cmp word [esi+2],'#'
+    jne .heading_one
+    cmp word [esi+4],' '
+    jne .find_line_end
+    mov [mdLineStyle],2
+    add dword [mdLineStart],3
+    jmp .find_line_end
+.heading_one:
+    cmp word [esi+2],' '
+    jne .find_line_end
+    mov [mdLineStyle],1
+    add dword [mdLineStart],2
+.find_line_end:
+    mov ax,[ebx]
+    test ax,ax
+    jz .line_ready
+    cmp ax,13
+    je .line_ready
+    cmp ax,10
+    je .line_ready
+    add ebx,2
+    inc ecx
+    jmp .find_line_end
+.line_ready:
+    mov [mdLineEnd],ecx
+    cmp [mdLineStyle],0
+    je .skip_style
+    push esi
+    push ebx
+    push ecx
+    call ApplyMarkdownDirectLineStyle
+    pop ecx
+    pop ebx
+    pop esi
+.skip_style:
+    mov ax,[ebx]
+    test ax,ax
+    jz .done
+    cmp ax,13
+    jne .lf_only
+    add ebx,2
+    inc ecx
+    cmp word [ebx],10
+    jne .next_line
+    add ebx,2
+    inc ecx
+    jmp .next_line
+.lf_only:
+    cmp ax,10
+    jne .next_line
+    add ebx,2
+    inc ecx
+.next_line:
+    mov esi,ebx
+    jmp .line_loop
+.done:
+    ret
+
+ApplyMarkdownDirectLineStyle:
+    mov eax,[mdLineEnd]
+    cmp eax,[mdLineStart]
+    jle .ret
+    invoke SendMessage,[hwndMdPreview],EM_SETSEL,[mdLineStart],[mdLineEnd]
+    invoke RtlZeroMemory,charFmt,CHARFORMATW_SIZE
+    mov dword [charFmt],CHARFORMATW_SIZE
+    cmp [mdLineStyle],1
+    je .heading_one
+    cmp [mdLineStyle],2
+    je .heading_two
+    cmp [mdLineStyle],4
+    je .code_block
+    jmp .ret
+.heading_one:
+    mov dword [charFmt+4],CFM_BOLD or CFM_SIZE
+    mov dword [charFmt+8],CFE_BOLD
+    mov dword [charFmt+12],300
+    jmp .send
+.heading_two:
+    mov dword [charFmt+4],CFM_BOLD or CFM_SIZE
+    mov dword [charFmt+8],CFE_BOLD
+    mov dword [charFmt+12],260
+    jmp .send
+.code_block:
+    mov dword [charFmt+4],CFM_FACE
+    mov esi,FONT_CONSOLAS_FACE
+    mov edi,charFmt+26
+    call StrCopyW
+.send:
+    invoke SendMessage,[hwndMdPreview],EM_SETCHARFORMAT,SCF_SELECTION,charFmt
+.ret:
     ret
 
 BuildMarkdownPreviewText:
@@ -2330,7 +2444,7 @@ DoSaveAsDialog:
     ret
 
 PromptSaveIfModified:
-    ; RC2 beta 5: central guard for destructive document changes.
+    ; RC2 beta 6: central guard for destructive document changes.
     ; Returns EAX=1 to continue, EAX=0 to cancel the caller's action.
     cmp [modified],0
     jne .ask
@@ -2408,7 +2522,7 @@ LoadFile:
     ret
 
 ApplyMarkdownModeForCurrentFile:
-    ; RC2 beta 5: Markdown files open directly in preview mode. The View menu
+    ; RC2 beta 6: Markdown files open directly in preview mode. The View menu
     ; toggle still switches back to raw source when desired.
     call IsMarkdownFilePath
     test eax,eax
@@ -5175,11 +5289,11 @@ section '.rsrc' resource data readable
 
   versioninfo version,4,1,0,0409h,04E4h,\
               'FileDescription','Small and fast text editor without fluff',\
-              'FileVersion','1.0.0.6',\
+              'FileVersion','1.0.0.7',\
               'InternalName','ByteForge',\
               'OriginalFilename','Byteforge.exe',\
               'ProductName','ByteForge',\
-              'ProductVersion','1.0.0.6'
+              'ProductVersion','1.0.0.7'
 
 section '.idata' import data readable writeable
 

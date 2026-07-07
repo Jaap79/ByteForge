@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0 RC2 beta 6
+
+- Reworked Markdown Preview as a direct Markdown-lite formatter over the preview source text.
+- Styled text after `# ` as bold +4pt and text after `## ` as bold +2pt.
+- Styled fenced code block contents with the Consolas font.
+- Removed fragile source-to-rendered-text offset mapping from the active preview path.
+
 ## 1.0 RC2 beta 5
 
 - Open `.md` and `.markdown` files directly in Markdown Preview.

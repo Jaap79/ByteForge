@@ -1,6 +1,6 @@
 # Release Checklist
 
-## 1.0 RC2 beta 5 Checks
+## 1.0 RC2 beta 6 Checks
 
 - [ ] Open empty document.
 - [ ] Open UTF-8 file with BOM.
@@ -28,11 +28,14 @@
 - [ ] Confirm fenced code blocks render as indented monospace blocks.
 - [ ] Confirm `.md` and `.markdown` files open in Markdown Preview automatically.
 - [ ] Confirm Ctrl+M toggles back to raw Markdown source.
+- [ ] Confirm text after `# ` is bold and roughly 4pt larger.
+- [ ] Confirm text after `## ` is bold and roughly 2pt larger.
+- [ ] Confirm fenced code block contents use Consolas.
 - [ ] Confirm New/Open/Drag & Drop/Exit prompts to save unsaved changes.
 - [ ] Resize hex viewer left/right/below.
 - [ ] Verify executable name is `Byteforge.exe`.
 - [ ] Verify executable VersionInfo in Explorer.
-- [ ] Verify About dialog shows `ByteForge 1.0 RC2 beta 5`.
+- [ ] Verify About dialog shows `ByteForge 1.0 RC2 beta 6`.
 - [ ] Verify About dialog shows `jaapengel79@proton.me`.
 - [ ] Verify Help -> Check for Updates reports the current release correctly.
 
