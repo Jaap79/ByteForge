@@ -1,8 +1,8 @@
-; ByteForge 1.0 RC2 beta 6 - pure FASM / Win32 Unicode
+; ByteForge 1.0 RC2 beta 8 - pure FASM / Win32 Unicode
 ; Build: fasm src\ByteForge.asm dist\Byteforge.exe
 ;
 ; Goals:
-; - small single EXE, no CRT, no external bundled DLLs
+; - small single EXE, no CRT, native-first Win32 implementation
 ; - GUI text editor using native EDIT control
 ; - Unicode internally, UTF-8/UTF-16LE/UTF-16BE BOM detection
 ; - Open / Save / Save As / New
@@ -13,21 +13,18 @@
 ;   ByteForge's OpenFileDocument implementation
 ; - Selectable checksum window with optional expected MD5/SHA-256
 ;   verification, one-shot "no more matches" notice, and editor Ctrl+/- zoom.
-; - RC2 beta 6: View->Markdown Preview (Ctrl+M) uses a compact, built-in
-;   RichEdit preview layer; source text remains untouched for editing/saving.
-; - RC2 beta 6: .md/.markdown files open in Markdown Preview automatically.
-; - RC2 beta 6: Markdown formatting is applied directly to the source view:
-;   text after # is bold +4pt, after ## bold +2pt, code blocks use Consolas.
 ; - RC2 beta 6: closing, New, Open and Drag & Drop prompt to save unsaved
 ;   changes; new documents use Save As, existing documents save in place.
+; - RC2 beta 8: empty new documents no longer trigger an unnecessary save
+;   prompt, and the experimental preview/parser work was removed again.
 ; - Security issues and bugs can be reported to jaapengel79@proton.me.
 ; - Window title contains full path + '*' when modified
 ; - Status bar shows line/column left, version right
 ; - Stable dark-gray mode for editor + status bar
 ;
 ; Notes:
-; - Uses standard Windows DLLs only: kernel32, user32, comdlg32, shell32,
-;   gdi32, advapi32 and wininet.
+; - Native-first policy: use standard Windows DLLs and keep optional parser
+;   experiments outside this mainline source.
 ; - Classic menu bar remains system-drawn for compactness/stability.
 ; - Executable version resource identifies ByteForge.
 
@@ -80,7 +77,6 @@ IDM_ZOOM_RESET      = 235
 IDM_JUMP_LINECHAR   = 236
 IDM_FILE_INFO       = 237
 IDM_CHECK_UPDATES   = 238
-IDM_MARKDOWN_PREVIEW = 239
 ID_BTN_CHECKSUM_COMPARE = 301
 ID_BTN_CHECKSUM_CLOSE   = 302
 ID_ED_MD5_ACTUAL        = 303
@@ -94,7 +90,7 @@ ID_ED_JUMP_LINE         = 323
 ID_ED_JUMP_CHAR         = 324
 ID_BTN_FILEINFO_CLOSE   = 331
 ID_ED_FILEINFO_TEXT     = 332
-ACCEL_COUNT         = 14
+ACCEL_COUNT         = 13
 VK_OEM_PLUS         = 0BBh
 VK_OEM_MINUS        = 0BDh
 VK_ADD              = 06Bh
@@ -156,16 +152,16 @@ FONT_CONSOLAS       = 3
 LOCAL_VER_MAJOR     = 1
 LOCAL_VER_MINOR     = 0
 LOCAL_VER_PATCH     = 0
-LOCAL_VER_BUILD     = 7
+LOCAL_VER_BUILD     = 8
 
 section '.data' data readable writeable
 
-VERSION_W           du 'ByteForge 1.0 RC2 beta 6',0
-APP_CLASS           du 'ByteForge10RC2B6Class',0
-APP_TITLE           du 'ByteForge 1.0 RC2 beta 6',0
-CHECKSUM_CLASS      du 'ByteForge10RC2B6ChecksumClass',0
-JUMP_CLASS          du 'ByteForge10RC2B6JumpClass',0
-FILEINFO_CLASS      du 'ByteForge10RC2B6FileInfoClass',0
+VERSION_W           du 'ByteForge 1.0 RC2 beta 8',0
+APP_CLASS           du 'ByteForge10RC2B8Class',0
+APP_TITLE           du 'ByteForge 1.0 RC2 beta 8',0
+CHECKSUM_CLASS      du 'ByteForge10RC2B8ChecksumClass',0
+JUMP_CLASS          du 'ByteForge10RC2B8JumpClass',0
+FILEINFO_CLASS      du 'ByteForge10RC2B8FileInfoClass',0
 EDIT_CLASS          du 'RICHEDIT50W',0
 WINEDIT_CLASS       du 'EDIT',0
 BUTTON_CLASS        du 'BUTTON',0
@@ -194,7 +190,6 @@ hInst       dd 0
 hAccel      dd 0
 hwndMain    dd 0
 hwndEdit    dd 0
-hwndMdPreview dd 0
 parentHwnd  dd 0
 editStyle   dd 0
 hwndStatus  dd 0
@@ -218,7 +213,6 @@ hFont       dd 0
 hRichEdit   dd 0
 loading     dd 0
 modified    dd 0
-markdownPreview dd 0
 darkmode    dd 1
 wordwrap    dd 0
 editorFontChoice dd FONT_DEFAULT
@@ -291,14 +285,6 @@ versionBuf  rw 32
 lineIdx     dd 0
 selStart    dd 0
 selEnd      dd 0
-mdLineStart dd 0
-mdLineEnd   dd 0
-mdLineStyle dd 0
-mdCodeBlock dd 0
-mdHeadingLevel dd 0
-mdBoldStart dd 0
-mdItalicStart dd 0
-mdCodeStart dd 0
 bytesIO     dd 0
 fileSize    dd 0
 tmpPtr      dd 0
@@ -387,7 +373,6 @@ menuPasteTxt du '&Paste',9,'Ctrl+V',0
 menuSelectAllTxt du 'Select &All',9,'Ctrl+A',0
 menuDarkTxt du '&Dark gray mode',0
 menuWrapTxt du '&Word wrap',0
-menuMarkdownPreviewTxt du '&Markdown Preview',9,'Ctrl+M',0
 menuZoomInTxt du 'Zoom &In',9,'Ctrl++',0
 menuZoomOutTxt du 'Zoom &Out',9,'Ctrl+-',0
 menuZoomResetTxt du 'Zoom &Reset',0
@@ -405,7 +390,7 @@ menuHexRightTxt du 'Hex view &right',0
 menuHexBelowTxt du 'Hex view &below',0
 menuHexCloseTxt du '&Close hex view',0
 menuChecksumTxt du '&Checksum of File',0
-aboutTxt du 'ByteForge 1.0 RC2 beta 6',13,10,'Small and fast text editor without fluff.',13,10,'Single EXE, no CRT, standard Windows DLLs only.',13,10,13,10,'Security issues and bugs: jaapengel79@proton.me',0
+aboutTxt du 'ByteForge 1.0 RC2 beta 8',13,10,'Small and fast text editor without fluff.',13,10,'Single EXE, no CRT, native-first Win32 code.',13,10,13,10,'Security issues and bugs: jaapengel79@proton.me',0
 savePromptTxt du 'Save changes before continuing?',0
 findNotFoundTxt du 'No more matches found.',0
 SAVE_FAIL_PREFIX du 'Save failed. GetLastError = ',0
@@ -436,7 +421,7 @@ checksumShaSkippedTxt du 'SHA-256: not checked',13,10,0
 updateTitleTxt du 'Check for Updates',0
 updateAgentTxt du 'ByteForge update check',0
 updateUrlTxt du 'https://raw.githubusercontent.com/Jaap79/ByteForge/main/version.json',0
-updateCurrentTxt du 'ByteForge 1.0 RC2 beta 6 (1.0.0.7)',0
+updateCurrentTxt du 'ByteForge 1.0 RC2 beta 8 (1.0.0.9)',0
 updateAvailableTxt du 'A newer ByteForge version is available.',13,10,13,10,'Current: ',0
 updateCurrentLatestTxt du 'ByteForge is up to date.',13,10,13,10,'Current: ',0
 updateLatestTxt du 13,10,'Latest: ',0
@@ -490,8 +475,6 @@ accels:
     dw 'S', IDM_SAVE
     db FVIRTKEY or FCONTROL,0
     dw 'F', IDM_FIND
-    db FVIRTKEY or FCONTROL,0
-    dw 'M', IDM_MARKDOWN_PREVIEW
     db FVIRTKEY or FCONTROL,0
     dw 'H', IDM_REPLACE
     db FVIRTKEY or FCONTROL,0
@@ -685,7 +668,6 @@ proc WndProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
     mov eax,[hwnd]
     mov [parentHwnd],eax
     call CreateEditorControl
-    call CreateMarkdownPreviewControl
 
     invoke CreateWindowEx,0,STATIC_CLASS,0,WS_CHILD or WS_VISIBLE or SS_LEFT,0,0,0,0,[hwnd],ID_STATUS,[hInst],0
     mov [hwndStatus],eax
@@ -817,8 +799,6 @@ proc WndProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
     je .do_selectall
     cmp eax,IDM_WORDWRAP
     je .do_wordwrap
-    cmp eax,IDM_MARKDOWN_PREVIEW
-    je .do_markdown_preview
     cmp eax,IDM_ZOOM_IN
     je .do_zoom_in
     cmp eax,IDM_ZOOM_OUT
@@ -891,8 +871,6 @@ proc WndProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
     xor eax,eax
     ret
 .do_undo:
-    cmp [markdownPreview],0
-    jne .readonly_preview_cmd
     invoke SendMessage,[hwndEdit],WM_UNDO,0,0
     xor eax,eax
     ret
@@ -900,47 +878,24 @@ proc WndProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
     xor eax,eax
     ret
 .do_cut:
-    cmp [markdownPreview],0
-    jne .readonly_preview_cmd
     invoke SendMessage,[hwndEdit],WM_CUT,0,0
     xor eax,eax
     ret
 .do_copy:
-    cmp [markdownPreview],0
-    je .copy_edit
-    invoke SendMessage,[hwndMdPreview],WM_COPY,0,0
-    xor eax,eax
-    ret
-.copy_edit:
     invoke SendMessage,[hwndEdit],WM_COPY,0,0
     xor eax,eax
     ret
 .do_paste:
-    cmp [markdownPreview],0
-    jne .readonly_preview_cmd
     invoke SendMessage,[hwndEdit],WM_PASTE,0,0
     xor eax,eax
     ret
 .do_selectall:
-    cmp [markdownPreview],0
-    je .select_edit
-    invoke SendMessage,[hwndMdPreview],EM_SETSEL,0,-1
-    xor eax,eax
-    ret
-.select_edit:
     invoke SendMessage,[hwndEdit],EM_SETSEL,0,-1
-    xor eax,eax
-    ret
-.readonly_preview_cmd:
     xor eax,eax
     ret
 .do_wordwrap:
     xor [wordwrap],1
     call ApplyWordWrap
-    xor eax,eax
-    ret
-.do_markdown_preview:
-    call ToggleMarkdownPreview
     xor eax,eax
     ret
 .do_zoom_in:
@@ -1048,12 +1003,6 @@ proc WndProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
     ret
 
 .focus:
-    cmp [markdownPreview],0
-    je .focus_edit
-    invoke SetFocus,[hwndMdPreview]
-    xor eax,eax
-    ret
-.focus_edit:
     invoke SetFocus,[hwndEdit]
     xor eax,eax
     ret
@@ -1319,7 +1268,6 @@ MakeMenu:
 
     invoke AppendMenu,[hMenuView],MF_STRING or MF_CHECKED,IDM_DARK,menuDarkTxt
     invoke AppendMenu,[hMenuView],MF_STRING,IDM_WORDWRAP,menuWrapTxt
-    invoke AppendMenu,[hMenuView],MF_STRING,IDM_MARKDOWN_PREVIEW,menuMarkdownPreviewTxt
     invoke AppendMenu,[hMenuView],MF_SEPARATOR,0,0
     invoke AppendMenu,[hMenuView],MF_STRING,IDM_ZOOM_IN,menuZoomInTxt
     invoke AppendMenu,[hMenuView],MF_STRING,IDM_ZOOM_OUT,menuZoomOutTxt
@@ -1410,13 +1358,8 @@ ApplyEditorFontChoice:
     cmp [hwndEdit],0
     je .checks
     invoke SendMessage,[hwndEdit],WM_SETFONT,[hEditorFont],TRUE
-    cmp [hwndMdPreview],0
-    je .no_preview_font
-    invoke SendMessage,[hwndMdPreview],WM_SETFONT,[hEditorFont],TRUE
-.no_preview_font:
     call ApplyTheme
     call ApplyEditorFontToRichText
-    call UpdateMarkdownPreviewIfVisible
     invoke InvalidateRect,[hwndEdit],0,TRUE
 .checks:
     invoke CheckMenuItem,[hMenuMain],IDM_FONT_DEFAULT,MF_BYCOMMAND or MF_UNCHECKED
@@ -1470,10 +1413,6 @@ ApplyEditorFontToRichText:
     call StrCopyW
     invoke SendMessage,[hwndEdit],EM_SETCHARFORMAT,SCF_DEFAULT,charFmt
     invoke SendMessage,[hwndEdit],EM_SETCHARFORMAT,SCF_ALL,charFmt
-    cmp [hwndMdPreview],0
-    je .ret
-    invoke SendMessage,[hwndMdPreview],EM_SETCHARFORMAT,SCF_DEFAULT,charFmt
-    invoke SendMessage,[hwndMdPreview],EM_SETCHARFORMAT,SCF_ALL,charFmt
 .ret:
     ret
 
@@ -1492,777 +1431,6 @@ CreateEditorControl:
     invoke SendMessage,[hwndEdit],EM_LIMITTEXT,0,0
     invoke SendMessage,[hwndEdit],EM_EXLIMITTEXT,0,7FFFFFFFh
     invoke SendMessage,[hwndEdit],EM_SETEVENTMASK,0,ENM_CHANGE
-    ret
-
-CreateMarkdownPreviewControl:
-    ; RC2 beta 6: Markdown Preview is a separate read-only RichEdit layer.
-    ; The real editor buffer is never replaced, so Save/Save As always writes
-    ; the original Markdown source text.
-    invoke CreateWindowEx,WS_EX_CLIENTEDGE,EDIT_CLASS,0,WS_CHILD or WS_VSCROLL or ES_MULTILINE or ES_AUTOVSCROLL or ES_NOHIDESEL or ES_READONLY,0,0,0,0,[parentHwnd],0,[hInst],0
-    mov [hwndMdPreview],eax
-    invoke SendMessage,[hwndMdPreview],WM_SETFONT,[hEditorFont],TRUE
-    invoke SendMessage,[hwndMdPreview],EM_SETMARGINS,EC_LEFTMARGIN,5
-    invoke SendMessage,[hwndMdPreview],EM_LIMITTEXT,0,0
-    invoke SendMessage,[hwndMdPreview],EM_EXLIMITTEXT,0,7FFFFFFFh
-    ret
-
-ToggleMarkdownPreview:
-    cmp [markdownPreview],0
-    je .turn_on
-.turn_off:
-    mov [markdownPreview],0
-    invoke CheckMenuItem,[hMenuMain],IDM_MARKDOWN_PREVIEW,MF_BYCOMMAND or MF_UNCHECKED
-    invoke ShowWindow,[hwndMdPreview],SW_HIDE
-    invoke ShowWindow,[hwndEdit],SW_SHOW
-    invoke SetFocus,[hwndEdit]
-    call UpdateStatus
-    ret
-.turn_on:
-    mov [markdownPreview],1
-    call RenderMarkdownPreview
-    invoke CheckMenuItem,[hMenuMain],IDM_MARKDOWN_PREVIEW,MF_BYCOMMAND or MF_CHECKED
-    invoke ShowWindow,[hwndEdit],SW_HIDE
-    invoke ShowWindow,[hwndMdPreview],SW_SHOW
-    invoke SetFocus,[hwndMdPreview]
-    call UpdateStatus
-    ret
-
-UpdateMarkdownPreviewIfVisible:
-    cmp [markdownPreview],0
-    jne RenderMarkdownPreview
-    ret
-
-RenderMarkdownPreview:
-    ; RC2 beta 6: compact self-contained Markdown formatting.
-    ; The preview shows the Markdown source text, then styles exact ranges in
-    ; that same text. This avoids fragile source-to-preview offset mapping.
-    cmp [hwndMdPreview],0
-    je .ret
-    invoke SendMessage,[hwndEdit],WM_GETTEXTLENGTH,0,0
-    mov [tmpLen],eax
-    inc eax
-    shl eax,1
-    mov [tmpSize],eax
-    invoke GlobalAlloc,GMEM_FIXED or GMEM_ZEROINIT,eax
-    test eax,eax
-    jz .ret
-    mov [tmpPtr],eax
-    mov eax,[tmpLen]
-    inc eax
-    invoke SendMessage,[hwndEdit],WM_GETTEXT,eax,[tmpPtr]
-    invoke SendMessage,[hwndMdPreview],WM_SETREDRAW,FALSE,0
-    invoke SetWindowText,[hwndMdPreview],[tmpPtr]
-    invoke SendMessage,[hwndMdPreview],WM_SETFONT,[hEditorFont],TRUE
-    call ResetMarkdownPreviewFormatting
-    call ApplyMarkdownDirectFormatting
-    invoke SendMessage,[hwndMdPreview],EM_SETSEL,0,0
-    invoke SendMessage,[hwndMdPreview],WM_SETREDRAW,TRUE,0
-    invoke InvalidateRect,[hwndMdPreview],0,TRUE
-    invoke GlobalFree,[tmpPtr]
-    mov [tmpPtr],0
-.ret:
-    ret
-
-ResetMarkdownPreviewFormatting:
-    ; RC2 beta 6: normalize the preview before applying Markdown formatting.
-    ; This prevents old RichEdit runs from leaving random colors/bold text.
-    invoke SendMessage,[hwndMdPreview],EM_SETSEL,0,-1
-    invoke RtlZeroMemory,charFmt,CHARFORMATW_SIZE
-    mov dword [charFmt],CHARFORMATW_SIZE
-    mov dword [charFmt+4],CFM_COLOR or CFM_BOLD or CFM_ITALIC or CFM_FACE or CFM_SIZE
-    mov dword [charFmt+8],0
-    mov dword [charFmt+12],220
-    mov eax,[textColor]
-    mov dword [charFmt+20],eax
-    ; Markdown Preview intentionally uses a proportional body font so code
-    ; blocks become visibly distinct when switched to the monospace face.
-    mov esi,FONT_SEGOE_FACE
-.copy_face:
-    mov edi,charFmt+26
-    call StrCopyW
-    invoke SendMessage,[hwndMdPreview],EM_SETCHARFORMAT,SCF_SELECTION,charFmt
-    ret
-
-ApplyMarkdownDirectFormatting:
-    ; RC2 beta 6: own Markdown-lite pass over the exact preview text.
-    ; - "# heading": style text after "# " as bold +4pt.
-    ; - "## heading": style text after "## " as bold +2pt.
-    ; - fenced code block contents use Consolas/monospace.
-    mov [mdCodeBlock],0
-    mov esi,[tmpPtr]
-    xor ecx,ecx
-.line_loop:
-    mov ax,[esi]
-    test ax,ax
-    jz .done
-    mov [mdLineStart],ecx
-    mov ebx,esi
-    mov [mdLineStyle],0
-    call IsMarkdownFence
-    test eax,eax
-    jz .not_fence
-    xor [mdCodeBlock],1
-    jmp .find_line_end
-.not_fence:
-    cmp [mdCodeBlock],0
-    je .heading_check
-    mov [mdLineStyle],4
-    jmp .find_line_end
-.heading_check:
-    cmp word [esi],'#'
-    jne .find_line_end
-    cmp word [esi+2],'#'
-    jne .heading_one
-    cmp word [esi+4],' '
-    jne .find_line_end
-    mov [mdLineStyle],2
-    add dword [mdLineStart],3
-    jmp .find_line_end
-.heading_one:
-    cmp word [esi+2],' '
-    jne .find_line_end
-    mov [mdLineStyle],1
-    add dword [mdLineStart],2
-.find_line_end:
-    mov ax,[ebx]
-    test ax,ax
-    jz .line_ready
-    cmp ax,13
-    je .line_ready
-    cmp ax,10
-    je .line_ready
-    add ebx,2
-    inc ecx
-    jmp .find_line_end
-.line_ready:
-    mov [mdLineEnd],ecx
-    cmp [mdLineStyle],0
-    je .skip_style
-    push esi
-    push ebx
-    push ecx
-    call ApplyMarkdownDirectLineStyle
-    pop ecx
-    pop ebx
-    pop esi
-.skip_style:
-    mov ax,[ebx]
-    test ax,ax
-    jz .done
-    cmp ax,13
-    jne .lf_only
-    add ebx,2
-    inc ecx
-    cmp word [ebx],10
-    jne .next_line
-    add ebx,2
-    inc ecx
-    jmp .next_line
-.lf_only:
-    cmp ax,10
-    jne .next_line
-    add ebx,2
-    inc ecx
-.next_line:
-    mov esi,ebx
-    jmp .line_loop
-.done:
-    ret
-
-ApplyMarkdownDirectLineStyle:
-    mov eax,[mdLineEnd]
-    cmp eax,[mdLineStart]
-    jle .ret
-    invoke SendMessage,[hwndMdPreview],EM_SETSEL,[mdLineStart],[mdLineEnd]
-    invoke RtlZeroMemory,charFmt,CHARFORMATW_SIZE
-    mov dword [charFmt],CHARFORMATW_SIZE
-    cmp [mdLineStyle],1
-    je .heading_one
-    cmp [mdLineStyle],2
-    je .heading_two
-    cmp [mdLineStyle],4
-    je .code_block
-    jmp .ret
-.heading_one:
-    mov dword [charFmt+4],CFM_BOLD or CFM_SIZE
-    mov dword [charFmt+8],CFE_BOLD
-    mov dword [charFmt+12],300
-    jmp .send
-.heading_two:
-    mov dword [charFmt+4],CFM_BOLD or CFM_SIZE
-    mov dword [charFmt+8],CFE_BOLD
-    mov dword [charFmt+12],260
-    jmp .send
-.code_block:
-    mov dword [charFmt+4],CFM_FACE
-    mov esi,FONT_CONSOLAS_FACE
-    mov edi,charFmt+26
-    call StrCopyW
-.send:
-    invoke SendMessage,[hwndMdPreview],EM_SETCHARFORMAT,SCF_SELECTION,charFmt
-.ret:
-    ret
-
-BuildMarkdownPreviewText:
-    mov [mdCodeBlock],0
-    mov esi,[tmpPtr]
-    mov edi,[convPtr]
-.line_loop:
-    mov ax,[esi]
-    test ax,ax
-    jz .done
-    call IsMarkdownFence
-    test eax,eax
-    jz .not_fence
-    xor [mdCodeBlock],1
-    call SkipMarkdownSourceLine
-    jmp .line_loop
-.not_fence:
-    mov [mdLineStyle],0
-    mov ebx,esi
-    cmp [mdCodeBlock],0
-    je .normal_line
-    mov [mdLineStyle],4
-    mov ax,' '
-    stosw
-    stosw
-    jmp .copy_line
-.normal_line:
-    cmp ax,'#'
-    jne .not_heading
-    mov [mdLineStyle],1
-    call CountHeadingLevel
-.skip_hashes:
-    cmp word [ebx],'#'
-    jne .skip_heading_spaces
-    add ebx,2
-    jmp .skip_hashes
-.skip_heading_spaces:
-    cmp word [ebx],' '
-    jne .copy_line
-    add ebx,2
-    jmp .skip_heading_spaces
-.not_heading:
-    cmp ax,'>'
-    jne .not_quote
-    mov [mdLineStyle],2
-    add ebx,2
-    cmp word [ebx],' '
-    jne .copy_line
-    add ebx,2
-    jmp .copy_line
-.not_quote:
-    cmp ax,'-'
-    je .maybe_bullet
-    cmp ax,'*'
-    je .maybe_bullet
-    cmp ax,'0'
-    jb .copy_line
-    cmp ax,'9'
-    ja .copy_line
-    call TryMarkdownNumberedList
-    test eax,eax
-    jz .copy_line
-    jmp .emit_bullet
-.maybe_bullet:
-    cmp word [esi+2],' '
-    jne .copy_line
-    mov [mdLineStyle],3
-    add ebx,4
-.emit_bullet:
-    mov ax,2022h
-    stosw
-    mov ax,' '
-    stosw
-.copy_line:
-    mov ax,[ebx]
-    test ax,ax
-    jz .done
-    cmp ax,13
-    je .copy_cr
-    cmp ax,10
-    je .copy_lf
-    cmp [mdLineStyle],4
-    je .copy_char
-    cmp ax,'*'
-    je .skip_inline_marker
-    cmp ax,'`'
-    je .skip_inline_marker
-.copy_char:
-    stosw
-.skip_inline_marker:
-    add ebx,2
-    jmp .copy_line
-.copy_cr:
-    stosw
-    add ebx,2
-    cmp word [ebx],10
-    jne .next_line
-    mov ax,10
-    stosw
-    add ebx,2
-    jmp .next_line
-.copy_lf:
-    stosw
-    add ebx,2
-.next_line:
-    mov esi,ebx
-    jmp .line_loop
-.done:
-    mov word [edi],0
-    ret
-
-IsMarkdownFence:
-    ; ESI = line start. Accept compact CommonMark-style ``` or ~~~ fences.
-    mov ax,[esi]
-    cmp ax,'`'
-    je .backtick
-    cmp ax,'~'
-    je .tilde
-    xor eax,eax
-    ret
-.backtick:
-    cmp word [esi+2],'`'
-    jne .no
-    cmp word [esi+4],'`'
-    jne .no
-    mov eax,1
-    ret
-.tilde:
-    cmp word [esi+2],'~'
-    jne .no
-    cmp word [esi+4],'~'
-    jne .no
-    mov eax,1
-    ret
-.no:
-    xor eax,eax
-    ret
-
-CountHeadingLevel:
-    ; ESI = heading line. Store ATX heading level 1..6.
-    push ebx
-    push ecx
-    mov ebx,esi
-    xor ecx,ecx
-.loop:
-    cmp word [ebx],'#'
-    jne .done
-    cmp ecx,6
-    jge .done
-    inc ecx
-    add ebx,2
-    jmp .loop
-.done:
-    cmp ecx,0
-    jne .store
-    mov ecx,1
-.store:
-    mov [mdHeadingLevel],ecx
-    pop ecx
-    pop ebx
-    ret
-
-TryMarkdownNumberedList:
-    ; ESI = original line, EBX receives first content char when matched.
-    mov ebx,esi
-.digit_loop:
-    mov ax,[ebx]
-    cmp ax,'0'
-    jb .no
-    cmp ax,'9'
-    ja .no
-    add ebx,2
-    jmp .digit_loop
-.no_more_digits:
-    ; unused label kept for readability
-.no:
-    cmp word [ebx],'.'
-    jne .fail
-    cmp word [ebx+2],' '
-    jne .fail
-    add ebx,4
-    mov [mdLineStyle],3
-    mov eax,1
-    ret
-.fail:
-    xor eax,eax
-    ret
-
-SkipMarkdownSourceLine:
-    mov ax,[esi]
-    test ax,ax
-    jz .ret
-    cmp ax,13
-    je .cr
-    cmp ax,10
-    je .lf
-    add esi,2
-    jmp SkipMarkdownSourceLine
-.cr:
-    add esi,2
-    cmp word [esi],10
-    jne .ret
-    add esi,2
-    ret
-.lf:
-    add esi,2
-.ret:
-    ret
-
-ApplyMarkdownPreviewFormatting:
-    call ApplyMarkdownLineFormatting
-    call ApplyMarkdownInlineFormatting
-    ret
-
-ApplyMarkdownLineFormatting:
-    mov [mdCodeBlock],0
-    mov esi,[tmpPtr]
-    xor ecx,ecx
-.line_loop:
-    mov ax,[esi]
-    test ax,ax
-    jz .done
-    mov [mdLineStart],ecx
-    mov [mdLineStyle],0
-    call IsMarkdownFence
-    test eax,eax
-    jz .not_fence
-    xor [mdCodeBlock],1
-    call SkipMarkdownSourceLine
-    jmp .line_loop
-.not_fence:
-    mov ebx,esi
-    cmp [mdCodeBlock],0
-    je .normal_line
-    mov [mdLineStyle],4
-    add ecx,2
-    jmp .count_line
-.normal_line:
-    cmp ax,'#'
-    jne .not_heading
-    mov [mdLineStyle],1
-    call CountHeadingLevel
-    call CountMarkdownHashes
-    jmp .count_line
-.not_heading:
-    cmp ax,'>'
-    jne .not_quote
-    mov [mdLineStyle],2
-    add ebx,2
-    cmp word [ebx],' '
-    jne .count_line
-    add ebx,2
-    jmp .count_line
-.not_quote:
-    cmp ax,'-'
-    je .maybe_list
-    cmp ax,'*'
-    je .maybe_list
-    cmp ax,'0'
-    jb .count_line
-    cmp ax,'9'
-    ja .count_line
-    call TryMarkdownNumberedList
-    test eax,eax
-    jz .count_line
-    add ecx,2
-    jmp .count_line
-.maybe_list:
-    cmp word [esi+2],' '
-    jne .count_line
-    mov [mdLineStyle],3
-    add ebx,4
-    add ecx,2
-.count_line:
-    mov ax,[ebx]
-    test ax,ax
-    jz .line_ready
-    cmp ax,13
-    je .line_ready
-    cmp ax,10
-    je .line_ready
-    cmp [mdLineStyle],4
-    je .count_char
-    cmp ax,'*'
-    je .skip_count_marker
-    cmp ax,'`'
-    je .skip_count_marker
-.count_char:
-    inc ecx
-.skip_count_marker:
-    add ebx,2
-    jmp .count_line
-.line_ready:
-    mov [mdLineEnd],ecx
-    cmp [mdLineStyle],0
-    je .skip_newline
-    push esi
-    push ecx
-    push ebx
-    call ApplyMarkdownLineStyle
-    pop ebx
-    pop ecx
-    pop esi
-.skip_newline:
-    mov ax,[ebx]
-    test ax,ax
-    jz .done
-    cmp ax,13
-    jne .skip_lf
-    add ebx,2
-    inc ecx
-    cmp word [ebx],10
-    jne .next_line
-    add ebx,2
-    inc ecx
-    jmp .next_line
-.skip_lf:
-    cmp ax,10
-    jne .next_line
-    add ebx,2
-    inc ecx
-.next_line:
-    mov esi,ebx
-    jmp .line_loop
-.done:
-    ret
-
-CountMarkdownHashes:
-    cmp word [ebx],'#'
-    jne .spaces
-    add ebx,2
-    jmp CountMarkdownHashes
-.spaces:
-    cmp word [ebx],' '
-    jne .ret
-    add ebx,2
-    jmp .spaces
-.ret:
-    ret
-
-ApplyMarkdownLineStyle:
-    mov eax,[mdLineEnd]
-    cmp eax,[mdLineStart]
-    jle .ret
-    invoke SendMessage,[hwndMdPreview],EM_SETSEL,[mdLineStart],[mdLineEnd]
-    invoke RtlZeroMemory,charFmt,CHARFORMATW_SIZE
-    mov dword [charFmt],CHARFORMATW_SIZE
-    cmp [mdLineStyle],1
-    je .heading
-    cmp [mdLineStyle],2
-    je .quote
-    cmp [mdLineStyle],3
-    je .list
-    cmp [mdLineStyle],4
-    je .md_code
-    jmp .ret
-.heading:
-    mov dword [charFmt+4],CFM_BOLD or CFM_SIZE
-    mov dword [charFmt+8],CFE_BOLD
-    mov dword [charFmt+12],320
-    cmp [mdHeadingLevel],1
-    je .send
-    mov dword [charFmt+12],280
-    cmp [mdHeadingLevel],2
-    je .send
-    mov dword [charFmt+12],240
-    jmp .send
-.quote:
-    mov dword [charFmt+4],CFM_ITALIC
-    mov dword [charFmt+8],CFE_ITALIC
-    jmp .send
-.list:
-    ret
-.md_code:
-    mov dword [charFmt+4],CFM_FACE
-    mov esi,HEX_FONT_FACE
-    mov edi,charFmt+26
-    call StrCopyW
-.send:
-    invoke SendMessage,[hwndMdPreview],EM_SETCHARFORMAT,SCF_SELECTION,charFmt
-.ret:
-    ret
-
-ApplyMarkdownInlineFormatting:
-    ; Sober inline Markdown formatting on the cleaned preview text.
-    ; Markers were stripped while building convPtr, so this pass maps source
-    ; positions to preview positions and applies only bold/italic/monospace.
-    mov [mdCodeBlock],0
-    mov [mdBoldStart],-1
-    mov [mdItalicStart],-1
-    mov [mdCodeStart],-1
-    mov esi,[tmpPtr]
-    xor ecx,ecx
-.line_loop:
-    mov ax,[esi]
-    test ax,ax
-    jz .done
-    call IsMarkdownFence
-    test eax,eax
-    jz .not_fence
-    xor [mdCodeBlock],1
-    call SkipMarkdownSourceLine
-    jmp .line_loop
-.not_fence:
-    mov ebx,esi
-    cmp [mdCodeBlock],0
-    jne .code_line
-    cmp ax,'#'
-    jne .not_heading
-    call CountMarkdownHashes
-    jmp .scan_line
-.not_heading:
-    cmp ax,'>'
-    jne .not_quote
-    add ebx,2
-    cmp word [ebx],' '
-    jne .scan_line
-    add ebx,2
-    jmp .scan_line
-.not_quote:
-    cmp ax,'-'
-    je .maybe_bullet
-    cmp ax,'*'
-    je .maybe_bullet
-    cmp ax,'0'
-    jb .scan_line
-    cmp ax,'9'
-    ja .scan_line
-    call TryMarkdownNumberedList
-    test eax,eax
-    jz .scan_line
-    add ecx,2
-    jmp .scan_line
-.maybe_bullet:
-    cmp word [esi+2],' '
-    jne .scan_line
-    add ebx,4
-    add ecx,2
-    jmp .scan_line
-.code_line:
-    add ecx,2
-.scan_line:
-    mov ax,[ebx]
-    test ax,ax
-    jz .done
-    cmp ax,13
-    je .line_end
-    cmp ax,10
-    je .line_end
-    cmp [mdCodeBlock],0
-    jne .plain_char
-    cmp ax,'`'
-    je .toggle_code
-    cmp ax,'*'
-    jne .plain_char
-    cmp word [ebx+2],'*'
-    je .toggle_bold
-    jmp .toggle_italic
-.toggle_bold:
-    cmp [mdBoldStart],-1
-    je .open_bold
-    push ebx
-    mov eax,[mdBoldStart]
-    mov edx,ecx
-    mov ebx,1
-    call ApplyMarkdownSpanStyle
-    pop ebx
-    mov [mdBoldStart],-1
-    add ebx,4
-    jmp .scan_line
-.open_bold:
-    mov [mdBoldStart],ecx
-    add ebx,4
-    jmp .scan_line
-.toggle_italic:
-    cmp [mdItalicStart],-1
-    je .open_italic
-    push ebx
-    mov eax,[mdItalicStart]
-    mov edx,ecx
-    mov ebx,2
-    call ApplyMarkdownSpanStyle
-    pop ebx
-    mov [mdItalicStart],-1
-    add ebx,2
-    jmp .scan_line
-.open_italic:
-    mov [mdItalicStart],ecx
-    add ebx,2
-    jmp .scan_line
-.toggle_code:
-    cmp [mdCodeStart],-1
-    je .open_code
-    push ebx
-    mov eax,[mdCodeStart]
-    mov edx,ecx
-    mov ebx,4
-    call ApplyMarkdownSpanStyle
-    pop ebx
-    mov [mdCodeStart],-1
-    add ebx,2
-    jmp .scan_line
-.open_code:
-    mov [mdCodeStart],ecx
-    add ebx,2
-    jmp .scan_line
-.plain_char:
-    inc ecx
-    add ebx,2
-    jmp .scan_line
-.line_end:
-    mov [mdBoldStart],-1
-    mov [mdItalicStart],-1
-    mov [mdCodeStart],-1
-    cmp ax,13
-    jne .lf_only
-    add ebx,2
-    inc ecx
-    cmp word [ebx],10
-    jne .next_line
-    add ebx,2
-    inc ecx
-    jmp .next_line
-.lf_only:
-    add ebx,2
-    inc ecx
-.next_line:
-    mov esi,ebx
-    jmp .line_loop
-.done:
-    ret
-
-ApplyMarkdownSpanStyle:
-    ; EAX=start, EDX=end, EBX=style: 1 bold, 2 italic, 4 code face.
-    cmp edx,eax
-    jle .ret
-    invoke SendMessage,[hwndMdPreview],EM_SETSEL,eax,edx
-    invoke RtlZeroMemory,charFmt,CHARFORMATW_SIZE
-    mov dword [charFmt],CHARFORMATW_SIZE
-    cmp ebx,1
-    je .bold
-    cmp ebx,2
-    je .italic
-    cmp ebx,4
-    je .inline_code
-    jmp .ret
-.bold:
-    mov dword [charFmt+4],CFM_BOLD
-    mov dword [charFmt+8],CFE_BOLD
-    jmp .send
-.italic:
-    mov dword [charFmt+4],CFM_ITALIC
-    mov dword [charFmt+8],CFE_ITALIC
-    jmp .send
-.inline_code:
-    mov dword [charFmt+4],CFM_FACE
-    mov esi,HEX_FONT_FACE
-    mov edi,charFmt+26
-    call StrCopyW
-.send:
-    invoke SendMessage,[hwndMdPreview],EM_SETCHARFORMAT,SCF_SELECTION,charFmt
-.ret:
     ret
 
 ApplyWordWrap:
@@ -2306,35 +1474,14 @@ ApplyWordWrap:
 
     call LayoutControls
     call ApplyTheme
-    cmp [markdownPreview],0
-    je .no_preview_restore
-    call RenderMarkdownPreview
-    invoke ShowWindow,[hwndEdit],SW_HIDE
-    invoke ShowWindow,[hwndMdPreview],SW_SHOW
-    jmp .preview_focus
-.no_preview_restore:
     invoke ShowWindow,[hwndEdit],SW_SHOW
-.preview_focus:
     call UpdateStatus
-    cmp [markdownPreview],0
-    je .focus_edit
-    invoke SetFocus,[hwndMdPreview]
-    jmp .done
-.focus_edit:
     invoke SetFocus,[hwndEdit]
 .done:
     ret
 
 NewFile:
-    cmp [markdownPreview],0
-    je .preview_off
-    call ToggleMarkdownPreview
-.preview_off:
     invoke SetWindowText,[hwndEdit],0
-    cmp [hwndMdPreview],0
-    je .no_preview_text
-    invoke SetWindowText,[hwndMdPreview],0
-.no_preview_text:
     invoke RtlZeroMemory,filePath,260*2
     mov [modified],0
     mov [encoding],ENC_UTF8
@@ -2444,10 +1591,21 @@ DoSaveAsDialog:
     ret
 
 PromptSaveIfModified:
-    ; RC2 beta 6: central guard for destructive document changes.
+    ; RC2 beta 8: central guard for destructive document changes.
+    ; A brand-new empty document can receive an initial EN_CHANGE from RichEdit;
+    ; do not ask to save it unless it actually contains text.
     ; Returns EAX=1 to continue, EAX=0 to cancel the caller's action.
     cmp [modified],0
+    jne .maybe_empty_new
+    mov eax,1
+    ret
+.maybe_empty_new:
+    cmp word [filePath],0
     jne .ask
+    invoke SendMessage,[hwndEdit],WM_GETTEXTLENGTH,0,0
+    test eax,eax
+    jne .ask
+    mov [modified],0
     mov eax,1
     ret
 .ask:
@@ -2516,99 +1674,8 @@ LoadFile:
     mov [hexDirty],1
     call UpdateTitle
     call UpdateStatus
-    call ApplyMarkdownModeForCurrentFile
     call UpdateHexPreview
 .done:
-    ret
-
-ApplyMarkdownModeForCurrentFile:
-    ; RC2 beta 6: Markdown files open directly in preview mode. The View menu
-    ; toggle still switches back to raw source when desired.
-    call IsMarkdownFilePath
-    test eax,eax
-    jz .not_markdown
-    cmp [markdownPreview],0
-    jne .render_current
-    call ToggleMarkdownPreview
-    ret
-.render_current:
-    call RenderMarkdownPreview
-    ret
-.not_markdown:
-    cmp [markdownPreview],0
-    je .ret
-    call ToggleMarkdownPreview
-.ret:
-    ret
-
-IsMarkdownFilePath:
-    cmp word [filePath],0
-    jne .scan
-    xor eax,eax
-    ret
-.scan:
-    mov esi,filePath
-    xor ebx,ebx
-.scan_loop:
-    mov ax,[esi]
-    test ax,ax
-    jz .got_end
-    cmp ax,'.'
-    jne .next_char
-    mov ebx,esi
-.next_char:
-    add esi,2
-    jmp .scan_loop
-.got_end:
-    test ebx,ebx
-    jz .no
-    mov esi,ebx
-    mov ax,[esi+2]
-    call LowerAsciiW
-    cmp ax,'m'
-    jne .no
-    mov ax,[esi+4]
-    call LowerAsciiW
-    cmp ax,'d'
-    jne .check_markdown
-    cmp word [esi+6],0
-    je .yes
-.check_markdown:
-    mov ax,[esi+4]
-    call LowerAsciiW
-    cmp ax,'a'
-    jne .no
-    mov ax,[esi+6]
-    call LowerAsciiW
-    cmp ax,'r'
-    jne .no
-    mov ax,[esi+8]
-    call LowerAsciiW
-    cmp ax,'k'
-    jne .no
-    mov ax,[esi+10]
-    call LowerAsciiW
-    cmp ax,'d'
-    jne .no
-    mov ax,[esi+12]
-    call LowerAsciiW
-    cmp ax,'o'
-    jne .no
-    mov ax,[esi+14]
-    call LowerAsciiW
-    cmp ax,'w'
-    jne .no
-    mov ax,[esi+16]
-    call LowerAsciiW
-    cmp ax,'n'
-    jne .no
-    cmp word [esi+18],0
-    jne .no
-.yes:
-    mov eax,1
-    ret
-.no:
-    xor eax,eax
     ret
 
 LowerAsciiW:
@@ -3723,10 +2790,6 @@ LayoutControls:
 
 MoveTextPane:
     invoke MoveWindow,[hwndEdit],[paneX],[paneY],[paneW],[paneH],[layoutRedraw]
-    cmp [hwndMdPreview],0
-    je .ret
-    invoke MoveWindow,[hwndMdPreview],[paneX],[paneY],[paneW],[paneH],[layoutRedraw]
-.ret:
     ret
 
 SetHexBytesPerLine:
@@ -4433,10 +3496,6 @@ ApplyTheme:
     je .light
     invoke CheckMenuItem,[hMenuMain],IDM_DARK,MF_BYCOMMAND or MF_CHECKED
     invoke SendMessage,[hwndEdit],EM_SETBKGNDCOLOR,0,202020h
-    cmp [hwndMdPreview],0
-    je .dark_no_preview_bg
-    invoke SendMessage,[hwndMdPreview],EM_SETBKGNDCOLOR,0,202020h
-.dark_no_preview_bg:
     cmp [hwndHex],0
     je .dark_no_hex_bg
     invoke SendMessage,[hwndHex],EM_SETBKGNDCOLOR,0,202020h
@@ -4444,10 +3503,6 @@ ApplyTheme:
     mov [textColor],0E8E8E8h
     call ApplyRichEditTextColor
     invoke InvalidateRect,[hwndEdit],0,TRUE
-    cmp [hwndMdPreview],0
-    je .dark_no_preview_invalidate
-    invoke InvalidateRect,[hwndMdPreview],0,TRUE
-.dark_no_preview_invalidate:
     invoke InvalidateRect,[hwndStatus],0,TRUE
     invoke InvalidateRect,[hwndStatusInfo],0,TRUE
     invoke InvalidateRect,[hwndStatusVer],0,TRUE
@@ -4455,10 +3510,6 @@ ApplyTheme:
 .light:
     invoke CheckMenuItem,[hMenuMain],IDM_DARK,MF_BYCOMMAND or MF_UNCHECKED
     invoke SendMessage,[hwndEdit],EM_SETBKGNDCOLOR,1,0
-    cmp [hwndMdPreview],0
-    je .light_no_preview_bg
-    invoke SendMessage,[hwndMdPreview],EM_SETBKGNDCOLOR,1,0
-.light_no_preview_bg:
     cmp [hwndHex],0
     je .light_no_hex_bg
     invoke SendMessage,[hwndHex],EM_SETBKGNDCOLOR,1,0
@@ -4466,10 +3517,6 @@ ApplyTheme:
     mov [textColor],000000h
     call ApplyRichEditTextColor
     invoke InvalidateRect,[hwndEdit],0,TRUE
-    cmp [hwndMdPreview],0
-    je .light_no_preview_invalidate
-    invoke InvalidateRect,[hwndMdPreview],0,TRUE
-.light_no_preview_invalidate:
     invoke InvalidateRect,[hwndStatus],0,TRUE
     invoke InvalidateRect,[hwndStatusInfo],0,TRUE
     invoke InvalidateRect,[hwndStatusVer],0,TRUE
@@ -4486,11 +3533,6 @@ ApplyRichEditTextColor:
     mov dword [charFmt+20],eax
     invoke SendMessage,[hwndEdit],EM_SETCHARFORMAT,SCF_DEFAULT,charFmt
     invoke SendMessage,[hwndEdit],EM_SETCHARFORMAT,SCF_ALL,charFmt
-    cmp [hwndMdPreview],0
-    je .no_preview_text_color
-    invoke SendMessage,[hwndMdPreview],EM_SETCHARFORMAT,SCF_DEFAULT,charFmt
-    invoke SendMessage,[hwndMdPreview],EM_SETCHARFORMAT,SCF_ALL,charFmt
-.no_preview_text_color:
     cmp [hwndHex],0
     je .ret
     invoke SendMessage,[hwndHex],EM_SETCHARFORMAT,SCF_DEFAULT,charFmt
@@ -5289,11 +4331,11 @@ section '.rsrc' resource data readable
 
   versioninfo version,4,1,0,0409h,04E4h,\
               'FileDescription','Small and fast text editor without fluff',\
-              'FileVersion','1.0.0.7',\
+              'FileVersion','1.0.0.9',\
               'InternalName','ByteForge',\
               'OriginalFilename','Byteforge.exe',\
               'ProductName','ByteForge',\
-              'ProductVersion','1.0.0.7'
+              'ProductVersion','1.0.0.9'
 
 section '.idata' import data readable writeable
 

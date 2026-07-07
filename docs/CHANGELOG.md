@@ -1,44 +1,10 @@
 # Changelog
 
-## 1.0 RC2 beta 6
+## 1.0 RC2 beta 8
 
-- Reworked Markdown Preview as a direct Markdown-lite formatter over the preview source text.
-- Styled text after `# ` as bold +4pt and text after `## ` as bold +2pt.
-- Styled fenced code block contents with the Consolas font.
-- Removed fragile source-to-rendered-text offset mapping from the active preview path.
-
-## 1.0 RC2 beta 5
-
-- Open `.md` and `.markdown` files directly in Markdown Preview.
-- Keep View -> Markdown Preview as a manual toggle back to raw Markdown source.
-- Reset Markdown Preview when creating a new file.
-
-## 1.0 RC2 beta 4
-
-- Improved Markdown Preview using a clearer block/inline pass inspired by CommonMark parsing.
-- Made preview body text proportional so code blocks visibly switch to monospace.
-- Made ATX headings larger and bold by level.
-- Added support for both backtick and tilde fenced code blocks.
-- Indented fenced code block contents slightly for readability.
-
-## 1.0 RC2 beta 3
-
-- Simplified Markdown Preview styling to avoid syntax-highlighting colors.
-- Reset preview formatting before each render to prevent stale RichEdit color/bold runs.
-- Kept Markdown formatting sober: headings bold, emphasis italic/bold and code monospace.
-
-## 1.0 RC2 beta 2
-
-- Improved Markdown Preview rendering so common Markdown markers are stripped from preview text.
-- Hidden fenced-code delimiters while keeping code contents in monospace preview formatting.
-- Rendered unordered and numbered lists with cleaner bullet output.
-
-## 1.0 RC2 beta 1
-
-- Added View -> Markdown Preview with Ctrl+M.
-- Markdown Preview uses a compact built-in RichEdit preview layer; source text remains unchanged for editing and saving.
-- Added save prompts before New, Open, Drag & Drop and Exit when the current document has unsaved changes.
-- New unsaved files use Save As from the existing save routine; existing modified files save in place.
+- Removed the experimental document preview/parser work from the mainline build.
+- Restored the build to a single FASM executable.
+- Kept the empty-document save prompt fix for brand-new untouched files.
 
 ## 1.0 RC1
 
