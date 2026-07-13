@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0 RC2 beta 9
+
+- Added right-click editor context menu with Cut, Copy, Paste and Find More.
+- Added Find More to prefill the Find dialog from the current text selection.
+- Added text highlighting from the Edit menu and selection context menu.
+- Supported highlighter colors: red, orange, yellow and green.
+- Kept highlighting visual/session-only so plain-text file contents remain unchanged.
+
 ## 1.0 RC2 beta 8
 
 - Removed the experimental document preview/parser work from the mainline build.

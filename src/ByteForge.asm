@@ -1,4 +1,4 @@
-; ByteForge 1.0 RC2 beta 8 - pure FASM / Win32 Unicode
+; ByteForge 1.0 RC2 beta 9 - pure FASM / Win32 Unicode
 ; Build: fasm src\ByteForge.asm dist\Byteforge.exe
 ;
 ; Goals:
@@ -17,6 +17,8 @@
 ;   changes; new documents use Save As, existing documents save in place.
 ; - RC2 beta 8: empty new documents no longer trigger an unnecessary save
 ;   prompt, and the experimental preview/parser work was removed again.
+; - RC2 beta 9: right-click editor menu with Cut/Copy/Paste/Find More and
+;   selectable text highlighting from Edit and context menus.
 ; - Security issues and bugs can be reported to jaapengel79@proton.me.
 ; - Window title contains full path + '*' when modified
 ; - Status bar shows line/column left, version right
@@ -77,6 +79,11 @@ IDM_ZOOM_RESET      = 235
 IDM_JUMP_LINECHAR   = 236
 IDM_FILE_INFO       = 237
 IDM_CHECK_UPDATES   = 238
+IDM_FIND_MORE       = 239
+IDM_HILITE_RED      = 240
+IDM_HILITE_ORANGE   = 241
+IDM_HILITE_YELLOW   = 242
+IDM_HILITE_GREEN    = 243
 ID_BTN_CHECKSUM_COMPARE = 301
 ID_BTN_CHECKSUM_CLOSE   = 302
 ID_ED_MD5_ACTUAL        = 303
@@ -90,6 +97,7 @@ ID_ED_JUMP_LINE         = 323
 ID_ED_JUMP_CHAR         = 324
 ID_BTN_FILEINFO_CLOSE   = 331
 ID_ED_FILEINFO_TEXT     = 332
+ID_FIND_DIALOG_TEXT     = 480
 ACCEL_COUNT         = 13
 VK_OEM_PLUS         = 0BBh
 VK_OEM_MINUS        = 0BDh
@@ -116,6 +124,11 @@ WM_SETREDRAW        = 11
 EM_SETEVENTMASK     = 1093
 ENM_CHANGE          = 1
 EM_SETCHARFORMAT    = 1092
+EM_GETTEXTRANGE     = 1099
+WM_CONTEXTMENU      = 007Bh
+WM_INITMENUPOPUP    = 0117h
+TPM_RETURNCMD       = 0100h
+TPM_RIGHTBUTTON     = 0002h
 SCF_DEFAULT         = 0
 SCF_SELECTION       = 1
 SCF_ALL             = 4
@@ -124,9 +137,11 @@ CFM_FACE            = 20000000h
 CFM_BOLD            = 00000001h
 CFM_ITALIC          = 00000002h
 CFM_SIZE            = 80000000h
+CFM_BACKCOLOR       = 04000000h
 CFE_BOLD            = 00000001h
 CFE_ITALIC          = 00000002h
 CHARFORMATW_SIZE    = 92
+CHARFORMAT2W_SIZE   = 116
 HEX_OFF             = 0
 HEX_LEFT            = 1
 HEX_RIGHT           = 2
@@ -152,16 +167,16 @@ FONT_CONSOLAS       = 3
 LOCAL_VER_MAJOR     = 1
 LOCAL_VER_MINOR     = 0
 LOCAL_VER_PATCH     = 0
-LOCAL_VER_BUILD     = 8
+LOCAL_VER_BUILD     = 10
 
 section '.data' data readable writeable
 
-VERSION_W           du 'ByteForge 1.0 RC2 beta 8',0
-APP_CLASS           du 'ByteForge10RC2B8Class',0
-APP_TITLE           du 'ByteForge 1.0 RC2 beta 8',0
-CHECKSUM_CLASS      du 'ByteForge10RC2B8ChecksumClass',0
-JUMP_CLASS          du 'ByteForge10RC2B8JumpClass',0
-FILEINFO_CLASS      du 'ByteForge10RC2B8FileInfoClass',0
+VERSION_W           du 'ByteForge 1.0 RC2 beta 9',0
+APP_CLASS           du 'ByteForge10RC2B9Class',0
+APP_TITLE           du 'ByteForge 1.0 RC2 beta 9',0
+CHECKSUM_CLASS      du 'ByteForge10RC2B9ChecksumClass',0
+JUMP_CLASS          du 'ByteForge10RC2B9JumpClass',0
+FILEINFO_CLASS      du 'ByteForge10RC2B9FileInfoClass',0
 EDIT_CLASS          du 'RICHEDIT50W',0
 WINEDIT_CLASS       du 'EDIT',0
 BUTTON_CLASS        du 'BUTTON',0
@@ -206,6 +221,7 @@ hMenuEdit   dd 0
 hMenuTools  dd 0
 hMenuHex    dd 0
 hMenuHelp   dd 0
+hMenuHighlight dd 0
 hFindDlg    dd 0
 hDarkBrush  dd 0
 hStatBrush  dd 0
@@ -261,6 +277,9 @@ ft_chrg_max dd 0
 ft_text     dd 0
 ft_res_min  dd 0
 ft_res_max  dd 0
+tr_chrg_min dd 0
+tr_chrg_max dd 0
+tr_text     dd 0
 hx_chrg_min dd 0
 hx_chrg_max dd 0
 hx_text     dd 0
@@ -350,7 +369,12 @@ fileInfoAttr rb 36
 localFileTime rb 8
 fileSysTime rb 16
 textColor   dd 0
-charFmt     rb CHARFORMATW_SIZE
+highlightColor dd 0
+ctxX        dd 0
+ctxY        dd 0
+pt_x        dd 0
+pt_y        dd 0
+charFmt     rb CHARFORMAT2W_SIZE
 
 menuFileTxt du '&File',0
 menuViewTxt du '&View',0
@@ -363,8 +387,14 @@ menuSaveTxt du '&Save',9,'Ctrl+S',0
 menuSaveAsTxt du 'Save &As...',0
 menuFileInfoTxt du 'File &Info...',0
 menuFindTxt du '&Find...',9,'Ctrl+F',0
+menuFindMoreTxt du 'Find &More',0
 menuReplaceTxt du '&Replace...',9,'Ctrl+H',0
 menuJumpTxt du '&Jump to line/char...',0
+menuHighlightTxt du '&Highlight',0
+menuHighlightRedTxt du '&Red',0
+menuHighlightOrangeTxt du '&Orange',0
+menuHighlightYellowTxt du '&Yellow',0
+menuHighlightGreenTxt du '&Green',0
 menuUndoTxt du '&Undo',9,'Ctrl+Z',0
 menuRedoTxt du '&Redo',9,'Ctrl+Y',0
 menuCutTxt du 'Cu&t',9,'Ctrl+X',0
@@ -390,7 +420,7 @@ menuHexRightTxt du 'Hex view &right',0
 menuHexBelowTxt du 'Hex view &below',0
 menuHexCloseTxt du '&Close hex view',0
 menuChecksumTxt du '&Checksum of File',0
-aboutTxt du 'ByteForge 1.0 RC2 beta 8',13,10,'Small and fast text editor without fluff.',13,10,'Single EXE, no CRT, native-first Win32 code.',13,10,13,10,'Security issues and bugs: jaapengel79@proton.me',0
+aboutTxt du 'ByteForge 1.0 RC2 beta 9',13,10,'Small and fast text editor without fluff.',13,10,'Single EXE, no CRT, native-first Win32 code.',13,10,13,10,'Security issues and bugs: jaapengel79@proton.me',0
 savePromptTxt du 'Save changes before continuing?',0
 findNotFoundTxt du 'No more matches found.',0
 SAVE_FAIL_PREFIX du 'Save failed. GetLastError = ',0
@@ -421,7 +451,7 @@ checksumShaSkippedTxt du 'SHA-256: not checked',13,10,0
 updateTitleTxt du 'Check for Updates',0
 updateAgentTxt du 'ByteForge update check',0
 updateUrlTxt du 'https://raw.githubusercontent.com/Jaap79/ByteForge/main/version.json',0
-updateCurrentTxt du 'ByteForge 1.0 RC2 beta 8 (1.0.0.9)',0
+updateCurrentTxt du 'ByteForge 1.0 RC2 beta 9 (1.0.0.10)',0
 updateAvailableTxt du 'A newer ByteForge version is available.',13,10,13,10,'Current: ',0
 updateCurrentLatestTxt du 'ByteForge is up to date.',13,10,13,10,'Current: ',0
 updateLatestTxt du 13,10,'Latest: ',0
@@ -647,6 +677,10 @@ proc WndProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
     je .mouse_move
     cmp eax,WM_LBUTTONUP
     je .mouse_up
+    cmp eax,WM_CONTEXTMENU
+    je .context_menu
+    cmp eax,WM_INITMENUPOPUP
+    je .init_menu_popup
     cmp eax,WM_COMMAND
     je .command
     cmp eax,WM_DROPFILES
@@ -744,6 +778,21 @@ proc WndProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
     xor eax,eax
     ret
 
+.context_menu:
+    mov eax,[wparam]
+    cmp eax,[hwndEdit]
+    jne .default
+    mov eax,[lparam]
+    mov [mouseParam],eax
+    call ShowEditorContextMenu
+    xor eax,eax
+    ret
+
+.init_menu_popup:
+    call UpdateEditMenuState
+    xor eax,eax
+    ret
+
 .command:
     mov eax,[wparam]
     shr eax,16
@@ -779,6 +828,8 @@ proc WndProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
     je .do_fileinfo
     cmp eax,IDM_FIND
     je .do_find
+    cmp eax,IDM_FIND_MORE
+    je .do_find_more
     cmp eax,IDM_JUMP_LINECHAR
     je .do_jump
     cmp eax,IDM_DARK
@@ -799,6 +850,14 @@ proc WndProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
     je .do_selectall
     cmp eax,IDM_WORDWRAP
     je .do_wordwrap
+    cmp eax,IDM_HILITE_RED
+    je .do_hilite_red
+    cmp eax,IDM_HILITE_ORANGE
+    je .do_hilite_orange
+    cmp eax,IDM_HILITE_YELLOW
+    je .do_hilite_yellow
+    cmp eax,IDM_HILITE_GREEN
+    je .do_hilite_green
     cmp eax,IDM_ZOOM_IN
     je .do_zoom_in
     cmp eax,IDM_ZOOM_OUT
@@ -861,6 +920,10 @@ proc WndProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
     call ShowFind
     xor eax,eax
     ret
+.do_find_more:
+    call FindMoreFromSelection
+    xor eax,eax
+    ret
 .do_jump:
     call ShowJumpDialog
     xor eax,eax
@@ -896,6 +959,26 @@ proc WndProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
 .do_wordwrap:
     xor [wordwrap],1
     call ApplyWordWrap
+    xor eax,eax
+    ret
+.do_hilite_red:
+    mov [highlightColor],00A0A0FFh
+    call ApplySelectionHighlight
+    xor eax,eax
+    ret
+.do_hilite_orange:
+    mov [highlightColor],0000C8FFh
+    call ApplySelectionHighlight
+    xor eax,eax
+    ret
+.do_hilite_yellow:
+    mov [highlightColor],0000FFFFh
+    call ApplySelectionHighlight
+    xor eax,eax
+    ret
+.do_hilite_green:
+    mov [highlightColor],0080FF80h
+    call ApplySelectionHighlight
     xor eax,eax
     ret
 .do_zoom_in:
@@ -1244,6 +1327,8 @@ MakeMenu:
     mov [hMenuHex],eax
     invoke CreatePopupMenu
     mov [hMenuHelp],eax
+    invoke CreatePopupMenu
+    mov [hMenuHighlight],eax
 
     invoke AppendMenu,[hMenuFile],MF_STRING,IDM_NEW,menuNewTxt
     invoke AppendMenu,[hMenuFile],MF_STRING,IDM_OPEN,menuOpenTxt
@@ -1263,8 +1348,15 @@ MakeMenu:
     invoke AppendMenu,[hMenuEdit],MF_STRING,IDM_SELECTALL,menuSelectAllTxt
     invoke AppendMenu,[hMenuEdit],MF_SEPARATOR,0,0
     invoke AppendMenu,[hMenuEdit],MF_STRING,IDM_FIND,menuFindTxt
+    invoke AppendMenu,[hMenuEdit],MF_STRING or MF_GRAYED,IDM_FIND_MORE,menuFindMoreTxt
     invoke AppendMenu,[hMenuEdit],MF_STRING,IDM_JUMP_LINECHAR,menuJumpTxt
     invoke AppendMenu,[hMenuEdit],MF_STRING or MF_GRAYED,IDM_REPLACE,menuReplaceTxt
+    invoke AppendMenu,[hMenuEdit],MF_SEPARATOR,0,0
+    invoke AppendMenu,[hMenuHighlight],MF_STRING or MF_GRAYED,IDM_HILITE_RED,menuHighlightRedTxt
+    invoke AppendMenu,[hMenuHighlight],MF_STRING or MF_GRAYED,IDM_HILITE_ORANGE,menuHighlightOrangeTxt
+    invoke AppendMenu,[hMenuHighlight],MF_STRING or MF_GRAYED,IDM_HILITE_YELLOW,menuHighlightYellowTxt
+    invoke AppendMenu,[hMenuHighlight],MF_STRING or MF_GRAYED,IDM_HILITE_GREEN,menuHighlightGreenTxt
+    invoke AppendMenu,[hMenuEdit],MF_POPUP,[hMenuHighlight],menuHighlightTxt
 
     invoke AppendMenu,[hMenuView],MF_STRING or MF_CHECKED,IDM_DARK,menuDarkTxt
     invoke AppendMenu,[hMenuView],MF_STRING,IDM_WORDWRAP,menuWrapTxt
@@ -1296,6 +1388,143 @@ MakeMenu:
     invoke AppendMenu,[hMenuMain],MF_POPUP,[hMenuView],menuViewTxt
     invoke AppendMenu,[hMenuMain],MF_POPUP,[hMenuTools],menuToolsTxt
     invoke AppendMenu,[hMenuMain],MF_POPUP,[hMenuHelp],menuHelpTxt
+    ret
+
+UpdateEditMenuState:
+    call HasEditorSelection
+    test eax,eax
+    jz .no_selection
+    invoke EnableMenuItem,[hMenuMain],IDM_CUT,MF_BYCOMMAND or MF_ENABLED
+    invoke EnableMenuItem,[hMenuMain],IDM_COPY,MF_BYCOMMAND or MF_ENABLED
+    invoke EnableMenuItem,[hMenuMain],IDM_FIND_MORE,MF_BYCOMMAND or MF_ENABLED
+    invoke EnableMenuItem,[hMenuMain],IDM_HILITE_RED,MF_BYCOMMAND or MF_ENABLED
+    invoke EnableMenuItem,[hMenuMain],IDM_HILITE_ORANGE,MF_BYCOMMAND or MF_ENABLED
+    invoke EnableMenuItem,[hMenuMain],IDM_HILITE_YELLOW,MF_BYCOMMAND or MF_ENABLED
+    invoke EnableMenuItem,[hMenuMain],IDM_HILITE_GREEN,MF_BYCOMMAND or MF_ENABLED
+    ret
+.no_selection:
+    invoke EnableMenuItem,[hMenuMain],IDM_CUT,MF_BYCOMMAND or MF_GRAYED
+    invoke EnableMenuItem,[hMenuMain],IDM_COPY,MF_BYCOMMAND or MF_GRAYED
+    invoke EnableMenuItem,[hMenuMain],IDM_FIND_MORE,MF_BYCOMMAND or MF_GRAYED
+    invoke EnableMenuItem,[hMenuMain],IDM_HILITE_RED,MF_BYCOMMAND or MF_GRAYED
+    invoke EnableMenuItem,[hMenuMain],IDM_HILITE_ORANGE,MF_BYCOMMAND or MF_GRAYED
+    invoke EnableMenuItem,[hMenuMain],IDM_HILITE_YELLOW,MF_BYCOMMAND or MF_GRAYED
+    invoke EnableMenuItem,[hMenuMain],IDM_HILITE_GREEN,MF_BYCOMMAND or MF_GRAYED
+    ret
+
+HasEditorSelection:
+    invoke SendMessage,[hwndEdit],EM_GETSEL,selStart,selEnd
+    mov eax,[selEnd]
+    cmp eax,[selStart]
+    jle .no
+    mov eax,1
+    ret
+.no:
+    xor eax,eax
+    ret
+
+ShowEditorContextMenu:
+    ; Right-click menu is selection-aware. Highlight is omitted entirely when
+    ; no text is selected, as requested.
+    mov eax,[mouseParam]
+    cmp eax,-1
+    jne .use_lparam
+    invoke GetCursorPos,pt_x
+    mov eax,[pt_x]
+    mov [ctxX],eax
+    mov eax,[pt_y]
+    mov [ctxY],eax
+    jmp .build
+.use_lparam:
+    movsx eax,word [mouseParam]
+    mov [ctxX],eax
+    mov eax,[mouseParam]
+    sar eax,16
+    mov [ctxY],eax
+.build:
+    invoke CreatePopupMenu
+    mov ebx,eax
+    call HasEditorSelection
+    test eax,eax
+    jz .paste_only
+    invoke AppendMenu,ebx,MF_STRING,IDM_CUT,menuCutTxt
+    invoke AppendMenu,ebx,MF_STRING,IDM_COPY,menuCopyTxt
+    invoke AppendMenu,ebx,MF_STRING,IDM_PASTE,menuPasteTxt
+    invoke AppendMenu,ebx,MF_SEPARATOR,0,0
+    invoke AppendMenu,ebx,MF_STRING,IDM_FIND_MORE,menuFindMoreTxt
+    invoke CreatePopupMenu
+    mov edi,eax
+    invoke AppendMenu,edi,MF_STRING,IDM_HILITE_RED,menuHighlightRedTxt
+    invoke AppendMenu,edi,MF_STRING,IDM_HILITE_ORANGE,menuHighlightOrangeTxt
+    invoke AppendMenu,edi,MF_STRING,IDM_HILITE_YELLOW,menuHighlightYellowTxt
+    invoke AppendMenu,edi,MF_STRING,IDM_HILITE_GREEN,menuHighlightGreenTxt
+    invoke AppendMenu,ebx,MF_SEPARATOR,0,0
+    invoke AppendMenu,ebx,MF_POPUP,edi,menuHighlightTxt
+    jmp .track
+.paste_only:
+    invoke AppendMenu,ebx,MF_STRING,IDM_PASTE,menuPasteTxt
+.track:
+    invoke TrackPopupMenu,ebx,TPM_RETURNCMD or TPM_RIGHTBUTTON,[ctxX],[ctxY],0,[hwndMain],0
+    test eax,eax
+    jz .destroy
+    invoke SendMessage,[hwndMain],WM_COMMAND,eax,0
+.destroy:
+    invoke DestroyMenu,ebx
+    ret
+
+CopySelectionToFindBuf:
+    ; Copy at most 255 UTF-16 chars from current selection to findBuf.
+    call HasEditorSelection
+    test eax,eax
+    jz .fail
+    mov eax,[selEnd]
+    sub eax,[selStart]
+    cmp eax,255
+    jle .len_ok
+    mov eax,255
+.len_ok:
+    mov ecx,[selStart]
+    mov [tr_chrg_min],ecx
+    add ecx,eax
+    mov [tr_chrg_max],ecx
+    mov [tr_text],findBuf
+    invoke SendMessage,[hwndEdit],EM_GETTEXTRANGE,0,tr_chrg_min
+    mov eax,[tr_chrg_max]
+    sub eax,[tr_chrg_min]
+    mov word [findBuf+eax*2],0
+    mov [findNoMoreShown],0
+    mov edi,lastFindBuf
+    mov word [edi],0
+    mov eax,1
+    ret
+.fail:
+    xor eax,eax
+    ret
+
+FindMoreFromSelection:
+    call CopySelectionToFindBuf
+    test eax,eax
+    jz .ret
+    call ShowFind
+    cmp [hFindDlg],0
+    je .ret
+    invoke SetDlgItemText,[hFindDlg],ID_FIND_DIALOG_TEXT,findBuf
+.ret:
+    ret
+
+ApplySelectionHighlight:
+    call HasEditorSelection
+    test eax,eax
+    jz .ret
+    mov [loading],1
+    invoke RtlZeroMemory,charFmt,CHARFORMAT2W_SIZE
+    mov dword [charFmt],CHARFORMAT2W_SIZE
+    mov dword [charFmt+4],CFM_BACKCOLOR
+    mov eax,[highlightColor]
+    mov dword [charFmt+96],eax
+    invoke SendMessage,[hwndEdit],EM_SETCHARFORMAT,SCF_SELECTION,charFmt
+    mov [loading],0
+.ret:
     ret
 
 
@@ -4331,11 +4560,11 @@ section '.rsrc' resource data readable
 
   versioninfo version,4,1,0,0409h,04E4h,\
               'FileDescription','Small and fast text editor without fluff',\
-              'FileVersion','1.0.0.9',\
+              'FileVersion','1.0.0.10',\
               'InternalName','ByteForge',\
               'OriginalFilename','Byteforge.exe',\
               'ProductName','ByteForge',\
-              'ProductVersion','1.0.0.9'
+              'ProductVersion','1.0.0.10'
 
 section '.idata' import data readable writeable
 

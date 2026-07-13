@@ -7,7 +7,7 @@ ByteForge is a compact Win32 Unicode text editor written in pure FASM. It is bui
 ## Current Version
 
 - Product: ByteForge
-- Version: 1.0 RC2 beta 8
+- Version: 1.0 RC2 beta 9
 - Source: `src/ByteForge.asm`
 - Current build: `dist/Byteforge.exe`
 
@@ -26,6 +26,8 @@ ByteForge is a compact Win32 Unicode text editor written in pure FASM. It is bui
 - Manual Help -> Check for Updates via the public `version.json` in this repository.
 - Text zoom via Ctrl+Plus, Ctrl+Minus and Reset Zoom.
 - Jump to line/character.
+- Right-click editor menu with Cut, Copy, Paste and Find More.
+- Selection highlighter with red, orange, yellow and green colors.
 - Unsaved-change prompts before New, Open, Drag & Drop and Exit.
 - Brand-new empty documents do not prompt for saving unless text was actually entered.
 
