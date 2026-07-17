@@ -37,6 +37,7 @@ include 'api\win32wx.inc'
 
 
 ID_EDIT             = 100
+IDI_APP             = 1
 ID_STATUS           = 101
 ID_STATUS_INFO      = 102
 ID_STATUS_VERSION   = 103
@@ -555,7 +556,8 @@ start:
     mov [wc.cbWndExtra],0
     mov eax,[hInst]
     mov [wc.hInstance],eax
-    mov [wc.hIcon],0
+    invoke LoadIcon,[hInst],IDI_APP
+    mov [wc.hIcon],eax
     mov [wc.hbrBackground],COLOR_WINDOW+1
     mov [wc.lpszMenuName],0
     mov [wc.lpszClassName],APP_CLASS
@@ -4553,10 +4555,131 @@ FormatSaveError:
 
 section '.rsrc' resource data readable
 
-  directory RT_VERSION,versions
+  directory RT_ICON,icons,\
+            RT_GROUP_ICON,group_icons,\
+            RT_VERSION,versions
+
+  resource icons,\
+           1,0409h,app_icon_16,\
+           2,0409h,app_icon_32
+
+  resource group_icons,\
+           IDI_APP,0409h,app_icon_group
 
   resource versions,\
            1,0409h,version
+
+  ; The complete ByteForge icon lives in this source file.  The two 32-bit
+  ; DIB payloads give Windows native title-bar and Explorer sizes without a
+  ; sidecar .ico file or a runtime dependency.
+  macro byteforge_icon label,icon_width,icon_height
+   { local data
+     label dd RVA data,40+icon_width*icon_height*4+icon_height*4,0,0
+     data:
+       dd 40,icon_width,icon_height*2
+       dw 1,32
+       dd 0,icon_width*icon_height*4,0,0,0,0
+
+     bf_row = 0
+     while bf_row < icon_height
+       bf_col = 0
+       while bf_col < icon_width
+         bf_x = bf_col*32/icon_width
+         bf_y = (icon_height-1-bf_row)*32/icon_height
+         bf_pixel = 0FF1B1E24h       ; forged charcoal background
+
+         ; Light B monogram.
+         if bf_x >= 6
+           if bf_x <= 8
+             if bf_y >= 7
+               if bf_y <= 24
+                 bf_pixel = 0FFF1F4F6h
+               end if
+             end if
+           end if
+         end if
+         if bf_x >= 9
+           if bf_x <= 13
+             if (bf_y >= 7) & (bf_y <= 9)
+               bf_pixel = 0FFF1F4F6h
+             end if
+             if (bf_y >= 14) & (bf_y <= 16)
+               bf_pixel = 0FFF1F4F6h
+             end if
+             if (bf_y >= 22) & (bf_y <= 24)
+               bf_pixel = 0FFF1F4F6h
+             end if
+           end if
+         end if
+         if bf_x >= 13
+           if bf_x <= 15
+             if (bf_y >= 9) & (bf_y <= 13)
+               bf_pixel = 0FFF1F4F6h
+             end if
+             if (bf_y >= 17) & (bf_y <= 21)
+               bf_pixel = 0FFF1F4F6h
+             end if
+           end if
+         end if
+
+         ; Forge-orange F monogram and sparks.
+         if bf_x >= 18
+           if bf_x <= 20
+             if bf_y >= 7
+               if bf_y <= 24
+                 bf_pixel = 0FFFF982Eh
+               end if
+             end if
+           end if
+         end if
+         if bf_x >= 21
+           if bf_x <= 27
+             if (bf_y >= 7) & (bf_y <= 9)
+               bf_pixel = 0FFFF982Eh
+             end if
+           end if
+         end if
+         if bf_x >= 21
+           if bf_x <= 25
+             if (bf_y >= 14) & (bf_y <= 16)
+               bf_pixel = 0FFFF982Eh
+             end if
+           end if
+         end if
+         if (bf_x >= 24) & (bf_x <= 25) & (bf_y >= 3) & (bf_y <= 4)
+           bf_pixel = 0FFFF982Eh
+         end if
+         if (bf_x >= 28) & (bf_x <= 29) & (bf_y >= 5) & (bf_y <= 6)
+           bf_pixel = 0FFFF982Eh
+         end if
+
+         dd bf_pixel
+         bf_col = bf_col+1
+       end while
+       bf_row = bf_row+1
+     end while
+
+     ; One DWORD-wide, fully opaque AND-mask row for both icon sizes.
+     repeat icon_height
+       dd 0
+     end repeat
+     align 4 }
+
+  byteforge_icon app_icon_16,16,16
+  byteforge_icon app_icon_32,32,32
+
+  app_icon_group dd RVA app_icon_group_data,34,0,0
+  app_icon_group_data:
+    dw 0,1,2
+    db 16,16,0,0
+    dw 1,32
+    dd 40+16*16*4+16*4
+    dw 1
+    db 32,32,0,0
+    dw 1,32
+    dd 40+32*32*4+32*4
+    dw 2
+    align 4
 
   versioninfo version,4,1,0,0409h,04E4h,\
               'FileDescription','Small and fast text editor without fluff',\
