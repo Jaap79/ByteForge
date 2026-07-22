@@ -85,6 +85,7 @@ IDM_HILITE_RED      = 240
 IDM_HILITE_ORANGE   = 241
 IDM_HILITE_YELLOW   = 242
 IDM_HILITE_GREEN    = 243
+IDM_HILITE_CLEAR    = 244
 ID_BTN_CHECKSUM_COMPARE = 301
 ID_BTN_CHECKSUM_CLOSE   = 302
 ID_ED_MD5_ACTUAL        = 303
@@ -99,7 +100,7 @@ ID_ED_JUMP_CHAR         = 324
 ID_BTN_FILEINFO_CLOSE   = 331
 ID_ED_FILEINFO_TEXT     = 332
 ID_FIND_DIALOG_TEXT     = 480
-ACCEL_COUNT         = 13
+ACCEL_COUNT         = 40
 VK_OEM_PLUS         = 0BBh
 VK_OEM_MINUS        = 0BDh
 VK_ADD              = 06Bh
@@ -139,6 +140,7 @@ CFM_BOLD            = 00000001h
 CFM_ITALIC          = 00000002h
 CFM_SIZE            = 80000000h
 CFM_BACKCOLOR       = 04000000h
+CFE_AUTOBACKCOLOR   = 04000000h
 CFE_BOLD            = 00000001h
 CFE_ITALIC          = 00000002h
 CHARFORMATW_SIZE    = 92
@@ -385,42 +387,43 @@ menuHelpTxt du '&Help',0
 menuNewTxt  du '&New',9,'Ctrl+N',0
 menuOpenTxt du '&Open...',9,'Ctrl+O',0
 menuSaveTxt du '&Save',9,'Ctrl+S',0
-menuSaveAsTxt du 'Save &As...',0
-menuFileInfoTxt du 'File &Info...',0
+menuSaveAsTxt du 'Save &As...',9,'Ctrl+Shift+S',0
+menuFileInfoTxt du 'File &Info...',9,'Ctrl+I',0
 menuFindTxt du '&Find...',9,'Ctrl+F',0
-menuFindMoreTxt du 'Find &More',0
+menuFindMoreTxt du 'Find &More',9,'F3',0
 menuReplaceTxt du '&Replace...',9,'Ctrl+H',0
-menuJumpTxt du '&Jump to line/char...',0
+menuJumpTxt du '&Jump to line/char...',9,'Ctrl+G',0
 menuHighlightTxt du '&Highlight',0
-menuHighlightRedTxt du '&Red',0
-menuHighlightOrangeTxt du '&Orange',0
-menuHighlightYellowTxt du '&Yellow',0
-menuHighlightGreenTxt du '&Green',0
+menuHighlightClearTxt du '&Remove highlight',9,'Ctrl+0',0
+menuHighlightRedTxt du '&Red',9,'Ctrl+1',0
+menuHighlightOrangeTxt du '&Orange',9,'Ctrl+2',0
+menuHighlightYellowTxt du '&Yellow',9,'Ctrl+3',0
+menuHighlightGreenTxt du '&Green',9,'Ctrl+4',0
 menuUndoTxt du '&Undo',9,'Ctrl+Z',0
 menuRedoTxt du '&Redo',9,'Ctrl+Y',0
 menuCutTxt du 'Cu&t',9,'Ctrl+X',0
 menuCopyTxt du '&Copy',9,'Ctrl+C',0
 menuPasteTxt du '&Paste',9,'Ctrl+V',0
 menuSelectAllTxt du 'Select &All',9,'Ctrl+A',0
-menuDarkTxt du '&Dark gray mode',0
-menuWrapTxt du '&Word wrap',0
+menuDarkTxt du '&Dark gray mode',9,'Ctrl+D',0
+menuWrapTxt du '&Word wrap',9,'Ctrl+W',0
 menuZoomInTxt du 'Zoom &In',9,'Ctrl++',0
 menuZoomOutTxt du 'Zoom &Out',9,'Ctrl+-',0
-menuZoomResetTxt du 'Zoom &Reset',0
+menuZoomResetTxt du 'Zoom &Reset',9,'Ctrl+Shift+0',0
 menuFontTxt du '&Font',0
-menuFontDefaultTxt du '&Default',0
-menuFontSegoeTxt du '&Segoe UI',0
-menuFontGeorgiaTxt du '&Georgia',0
-menuFontConsolasTxt du '&Consolas',0
-menuExitTxt du 'E&xit',0
-menuAboutTxt du '&About ByteForge',0
-menuCheckUpdatesTxt du '&Check for Updates...',0
+menuFontDefaultTxt du '&Default',9,'Ctrl+Shift+1',0
+menuFontSegoeTxt du '&Segoe UI',9,'Ctrl+Shift+2',0
+menuFontGeorgiaTxt du '&Georgia',9,'Ctrl+Shift+3',0
+menuFontConsolasTxt du '&Consolas',9,'Ctrl+Shift+4',0
+menuExitTxt du 'E&xit',9,'Alt+F4',0
+menuAboutTxt du '&About ByteForge',9,'F1',0
+menuCheckUpdatesTxt du '&Check for Updates...',9,'Ctrl+U',0
 menuHexTxt du '&Hex Viewer',0
-menuHexLeftTxt du 'Hex view &left',0
-menuHexRightTxt du 'Hex view &right',0
-menuHexBelowTxt du 'Hex view &below',0
-menuHexCloseTxt du '&Close hex view',0
-menuChecksumTxt du '&Checksum of File',0
+menuHexLeftTxt du 'Hex view &left',9,'Ctrl+Shift+L',0
+menuHexRightTxt du 'Hex view &right',9,'Ctrl+Shift+R',0
+menuHexBelowTxt du 'Hex view &below',9,'Ctrl+Shift+B',0
+menuHexCloseTxt du '&Close hex view',9,'Ctrl+Shift+X',0
+menuChecksumTxt du '&Checksum of File',9,'Ctrl+K',0
 aboutTxt du 'ByteForge 1.0 RC2 beta 9',13,10,'Small and fast text editor without fluff.',13,10,'Single EXE, no CRT, native-first Win32 code.',13,10,13,10,'Security issues and bugs: jaapengel79@proton.me',0
 savePromptTxt du 'Save changes before continuing?',0
 findNotFoundTxt du 'No more matches found.',0
@@ -504,10 +507,18 @@ accels:
     dw 'O', IDM_OPEN
     db FVIRTKEY or FCONTROL,0
     dw 'S', IDM_SAVE
+    db FVIRTKEY or FCONTROL or FSHIFT,0
+    dw 'S', IDM_SAVEAS
+    db FVIRTKEY or FCONTROL,0
+    dw 'I', IDM_FILE_INFO
     db FVIRTKEY or FCONTROL,0
     dw 'F', IDM_FIND
     db FVIRTKEY or FCONTROL,0
     dw 'H', IDM_REPLACE
+    db FVIRTKEY,0
+    dw VK_F3, IDM_FIND_MORE
+    db FVIRTKEY or FCONTROL,0
+    dw 'G', IDM_JUMP_LINECHAR
     db FVIRTKEY or FCONTROL,0
     dw 'A', IDM_SELECTALL
     db FVIRTKEY or FCONTROL,0
@@ -515,8 +526,28 @@ accels:
     db FVIRTKEY or FCONTROL,0
     dw 'Y', IDM_REDO
     db FVIRTKEY or FCONTROL,0
+    dw 'X', IDM_CUT
+    db FVIRTKEY or FCONTROL,0
+    dw 'C', IDM_COPY
+    db FVIRTKEY or FCONTROL,0
     dw 'V', IDM_PASTE
     db FVIRTKEY or FCONTROL,0
+    dw 'W', IDM_WORDWRAP
+    db FVIRTKEY or FCONTROL,0
+    dw 'D', IDM_DARK
+    db FVIRTKEY or FCONTROL,0
+    dw '0', IDM_HILITE_CLEAR
+    db FVIRTKEY or FCONTROL,0
+    dw '1', IDM_HILITE_RED
+    db FVIRTKEY or FCONTROL,0
+    dw '2', IDM_HILITE_ORANGE
+    db FVIRTKEY or FCONTROL,0
+    dw '3', IDM_HILITE_YELLOW
+    db FVIRTKEY or FCONTROL,0
+    dw '4', IDM_HILITE_GREEN
+    db FVIRTKEY or FCONTROL,0
+    dw VK_OEM_PLUS, IDM_ZOOM_IN
+    db FVIRTKEY or FCONTROL or FSHIFT,0
     dw VK_OEM_PLUS, IDM_ZOOM_IN
     db FVIRTKEY or FCONTROL,0
     dw VK_OEM_MINUS, IDM_ZOOM_OUT
@@ -524,6 +555,32 @@ accels:
     dw VK_ADD, IDM_ZOOM_IN
     db FVIRTKEY or FCONTROL,0
     dw VK_SUBTRACT, IDM_ZOOM_OUT
+    db FVIRTKEY or FCONTROL or FSHIFT,0
+    dw '0', IDM_ZOOM_RESET
+    db FVIRTKEY or FCONTROL or FSHIFT,0
+    dw '1', IDM_FONT_DEFAULT
+    db FVIRTKEY or FCONTROL or FSHIFT,0
+    dw '2', IDM_FONT_SEGOE
+    db FVIRTKEY or FCONTROL or FSHIFT,0
+    dw '3', IDM_FONT_GEORGIA
+    db FVIRTKEY or FCONTROL or FSHIFT,0
+    dw '4', IDM_FONT_CONSOLAS
+    db FVIRTKEY or FCONTROL or FSHIFT,0
+    dw 'L', IDM_HEX_LEFT
+    db FVIRTKEY or FCONTROL or FSHIFT,0
+    dw 'R', IDM_HEX_RIGHT
+    db FVIRTKEY or FCONTROL or FSHIFT,0
+    dw 'B', IDM_HEX_BELOW
+    db FVIRTKEY or FCONTROL or FSHIFT,0
+    dw 'X', IDM_HEX_CLOSE
+    db FVIRTKEY or FCONTROL,0
+    dw 'K', IDM_SHA256
+    db FVIRTKEY or FCONTROL,0
+    dw 'U', IDM_CHECK_UPDATES
+    db FVIRTKEY,0
+    dw VK_F1, IDM_ABOUT
+    db FVIRTKEY or FALT,0
+    dw VK_F4, IDM_EXIT
 
 section '.code' code readable executable
 
@@ -852,6 +909,8 @@ proc WndProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
     je .do_selectall
     cmp eax,IDM_WORDWRAP
     je .do_wordwrap
+    cmp eax,IDM_HILITE_CLEAR
+    je .do_hilite_clear
     cmp eax,IDM_HILITE_RED
     je .do_hilite_red
     cmp eax,IDM_HILITE_ORANGE
@@ -961,6 +1020,10 @@ proc WndProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
 .do_wordwrap:
     xor [wordwrap],1
     call ApplyWordWrap
+    xor eax,eax
+    ret
+.do_hilite_clear:
+    call ClearSelectionHighlight
     xor eax,eax
     ret
 .do_hilite_red:
@@ -1354,6 +1417,8 @@ MakeMenu:
     invoke AppendMenu,[hMenuEdit],MF_STRING,IDM_JUMP_LINECHAR,menuJumpTxt
     invoke AppendMenu,[hMenuEdit],MF_STRING or MF_GRAYED,IDM_REPLACE,menuReplaceTxt
     invoke AppendMenu,[hMenuEdit],MF_SEPARATOR,0,0
+    invoke AppendMenu,[hMenuHighlight],MF_STRING or MF_GRAYED,IDM_HILITE_CLEAR,menuHighlightClearTxt
+    invoke AppendMenu,[hMenuHighlight],MF_SEPARATOR,0,0
     invoke AppendMenu,[hMenuHighlight],MF_STRING or MF_GRAYED,IDM_HILITE_RED,menuHighlightRedTxt
     invoke AppendMenu,[hMenuHighlight],MF_STRING or MF_GRAYED,IDM_HILITE_ORANGE,menuHighlightOrangeTxt
     invoke AppendMenu,[hMenuHighlight],MF_STRING or MF_GRAYED,IDM_HILITE_YELLOW,menuHighlightYellowTxt
@@ -1399,6 +1464,7 @@ UpdateEditMenuState:
     invoke EnableMenuItem,[hMenuMain],IDM_CUT,MF_BYCOMMAND or MF_ENABLED
     invoke EnableMenuItem,[hMenuMain],IDM_COPY,MF_BYCOMMAND or MF_ENABLED
     invoke EnableMenuItem,[hMenuMain],IDM_FIND_MORE,MF_BYCOMMAND or MF_ENABLED
+    invoke EnableMenuItem,[hMenuMain],IDM_HILITE_CLEAR,MF_BYCOMMAND or MF_ENABLED
     invoke EnableMenuItem,[hMenuMain],IDM_HILITE_RED,MF_BYCOMMAND or MF_ENABLED
     invoke EnableMenuItem,[hMenuMain],IDM_HILITE_ORANGE,MF_BYCOMMAND or MF_ENABLED
     invoke EnableMenuItem,[hMenuMain],IDM_HILITE_YELLOW,MF_BYCOMMAND or MF_ENABLED
@@ -1408,6 +1474,7 @@ UpdateEditMenuState:
     invoke EnableMenuItem,[hMenuMain],IDM_CUT,MF_BYCOMMAND or MF_GRAYED
     invoke EnableMenuItem,[hMenuMain],IDM_COPY,MF_BYCOMMAND or MF_GRAYED
     invoke EnableMenuItem,[hMenuMain],IDM_FIND_MORE,MF_BYCOMMAND or MF_GRAYED
+    invoke EnableMenuItem,[hMenuMain],IDM_HILITE_CLEAR,MF_BYCOMMAND or MF_GRAYED
     invoke EnableMenuItem,[hMenuMain],IDM_HILITE_RED,MF_BYCOMMAND or MF_GRAYED
     invoke EnableMenuItem,[hMenuMain],IDM_HILITE_ORANGE,MF_BYCOMMAND or MF_GRAYED
     invoke EnableMenuItem,[hMenuMain],IDM_HILITE_YELLOW,MF_BYCOMMAND or MF_GRAYED
@@ -1456,6 +1523,8 @@ ShowEditorContextMenu:
     invoke AppendMenu,ebx,MF_STRING,IDM_FIND_MORE,menuFindMoreTxt
     invoke CreatePopupMenu
     mov edi,eax
+    invoke AppendMenu,edi,MF_STRING,IDM_HILITE_CLEAR,menuHighlightClearTxt
+    invoke AppendMenu,edi,MF_SEPARATOR,0,0
     invoke AppendMenu,edi,MF_STRING,IDM_HILITE_RED,menuHighlightRedTxt
     invoke AppendMenu,edi,MF_STRING,IDM_HILITE_ORANGE,menuHighlightOrangeTxt
     invoke AppendMenu,edi,MF_STRING,IDM_HILITE_YELLOW,menuHighlightYellowTxt
@@ -1524,6 +1593,20 @@ ApplySelectionHighlight:
     mov dword [charFmt+4],CFM_BACKCOLOR
     mov eax,[highlightColor]
     mov dword [charFmt+96],eax
+    invoke SendMessage,[hwndEdit],EM_SETCHARFORMAT,SCF_SELECTION,charFmt
+    mov [loading],0
+.ret:
+    ret
+
+ClearSelectionHighlight:
+    call HasEditorSelection
+    test eax,eax
+    jz .ret
+    mov [loading],1
+    invoke RtlZeroMemory,charFmt,CHARFORMAT2W_SIZE
+    mov dword [charFmt],CHARFORMAT2W_SIZE
+    mov dword [charFmt+4],CFM_BACKCOLOR
+    mov dword [charFmt+8],CFE_AUTOBACKCOLOR
     invoke SendMessage,[hwndEdit],EM_SETCHARFORMAT,SCF_SELECTION,charFmt
     mov [loading],0
 .ret:
